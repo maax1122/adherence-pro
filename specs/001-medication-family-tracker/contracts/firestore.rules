@@ -1,0 +1,188 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================================================
+    // HELPER FUNCTIONS
+    // ============================================================================
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if user owns the resource
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Check if user is a caregiver for a specific patient
+    function isCaregiver(patientId) {
+      return isAuthenticated() && exists(
+        /databases/$(database)/documents/family_connections/$(request.auth.uid + '_' + patientId)
+      ) && get(
+        /databases/$(database)/documents/family_connections/$(request.auth.uid + '_' + patientId)
+      ).data.status == 'accepted';
+    }
+    
+    // Check if user is owner or caregiver
+    function isOwnerOrCaregiver(userId, patientId) {
+      return isOwner(userId) || isCaregiver(patientId);
+    }
+    
+    // Check if caregiver has permission to log
+    function caregiverCanLog(patientId) {
+      let connection = get(
+        /databases/$(database)/documents/family_connections/$(request.auth.uid + '_' + patientId)
+      );
+      return connection.data.status == 'accepted' 
+        && connection.data.permissionLevel == 'can_log';
+    }
+    
+    // Check if edit is within 24-hour window
+    function withinEditWindow() {
+      return request.time < resource.data.createdAt + duration.value(24, 'h');
+    }
+    
+    // Validate FHIR MedicationRequest
+    function validMedicationRequest() {
+      let data = request.resource.data;
+      return data.resourceType == 'MedicationRequest'
+        && data.status in ['active', 'on-hold', 'cancelled', 'completed', 'entered-in-error', 'stopped', 'draft']
+        && data.intent in ['proposal', 'plan', 'order', 'original-order', 'reflex-order', 'filler-order', 'instance-order', 'option']
+        && data.medicationName is string && data.medicationName.size() > 0
+        && data.dosageInstruction is list && data.dosageInstruction.size() > 0;
+    }
+    
+    // Validate FHIR MedicationAdministration
+    function validMedicationAdministration() {
+      let data = request.resource.data;
+      return data.resourceType == 'MedicationAdministration'
+        && data.status in ['in-progress', 'not-done', 'on-hold', 'completed', 'entered-in-error', 'stopped', 'unknown']
+        && data.medicationRequestId is string
+        && data.effectiveDateTime is timestamp;
+    }
+    
+    // ============================================================================
+    // FHIR PATIENTS (PROFILES)
+    // ============================================================================
+    
+    match /patients/{patientId} {
+      // Users can read/write their own patient records
+      allow read, write: if isOwner(resource.data.userId);
+      
+      // Caregivers can read patient records they monitor
+      allow read: if isCaregiver(patientId);
+      
+      // Validate FHIR Patient data
+      allow create, update: if request.resource.data.resourceType == 'Patient'
+        && request.resource.data.active is bool
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.name is list && request.resource.data.name.size() > 0;
+    }
+    
+    // ============================================================================
+    // FHIR MEDICATION REQUESTS
+    // ============================================================================
+    
+    match /medication_requests/{medicationRequestId} {
+      // Owners can always read/write
+      allow read: if isOwner(resource.data.userId);
+      allow create: if isOwner(request.resource.data.userId) && validMedicationRequest();
+      allow update: if isOwner(resource.data.userId) && validMedicationRequest();
+      allow delete: if isOwner(resource.data.userId);
+      
+      // Caregivers can read
+      allow read: if isCaregiver(resource.data.patientId);
+      
+      // Caregivers with 'can_log' permission can create/update
+      allow create, update: if caregiverCanLog(request.resource.data.patientId) && validMedicationRequest();
+    }
+    
+    // ============================================================================
+    // FHIR MEDICATION ADMINISTRATIONS (LOGS)
+    // ============================================================================
+    
+    match /medication_administrations/{administrationId} {
+      // Owners can always read
+      allow read: if isOwner(resource.data.userId);
+      
+      // Owners can create logs
+      allow create: if isOwner(request.resource.data.userId)
+        && validMedicationAdministration()
+        && request.resource.data.effectiveDateTime <= request.time
+        && request.resource.data.status in ['completed', 'not-done'];
+      
+      // Owners can update within 24-hour window
+      allow update: if isOwner(resource.data.userId) 
+        && withinEditWindow()
+        && validMedicationAdministration();
+      
+      // Caregivers can read
+      allow read: if isCaregiver(resource.data.patientId);
+      
+      // Caregivers with 'can_log' permission can create/update logs
+      allow create: if caregiverCanLog(request.resource.data.patientId)
+        && validMedicationAdministration()
+        && request.resource.data.effectiveDateTime <= request.time
+        && request.resource.data.performerUserId == request.auth.uid
+        && request.resource.data.performerRole == 'caregiver';
+        
+      allow update: if caregiverCanLog(resource.data.patientId)
+        && withinEditWindow()
+        && resource.data.performerUserId == request.auth.uid;
+    }
+    
+    // ============================================================================
+    // REMINDER SCHEDULES
+    // ============================================================================
+    
+    match /reminder_schedules/{scheduleId} {
+      // Only owners can manage reminder schedules
+      allow read, write: if isOwner(resource.data.userId);
+      
+      // Validate schedule data
+      allow write: if request.resource.data.medicationRequestId is string
+        && request.resource.data.userId == request.auth.uid;
+    }
+    
+    // ============================================================================
+    // FAMILY CONNECTIONS
+    // ============================================================================
+    
+    match /family_connections/{connectionId} {
+      // Both patient and caregiver can read
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.patientUserId
+        || request.auth.uid == resource.data.caregiverUserId
+      );
+      
+      // Only patient can create invitation
+      allow create: if isAuthenticated()
+        && request.resource.data.patientUserId == request.auth.uid
+        && request.resource.data.patientUserId != request.resource.data.caregiverUserId
+        && request.resource.data.status == 'pending';
+      
+      // Caregiver can accept/reject
+      allow update: if isAuthenticated()
+        && request.auth.uid == resource.data.caregiverUserId
+        && resource.data.status == 'pending'
+        && request.resource.data.status in ['accepted', 'rejected'];
+      
+      // Patient can revoke
+      allow update: if isAuthenticated()
+        && request.auth.uid == resource.data.patientUserId
+        && resource.data.status == 'accepted'
+        && request.resource.data.status == 'revoked';
+    }
+    
+    // ============================================================================
+    // SYSTEM COLLECTIONS (Read-only)
+    // ============================================================================
+    
+    match /system/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Only Cloud Functions can write
+    }
+  }
+}
