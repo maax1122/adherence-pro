@@ -113,40 +113,25 @@ npx expo install react-hook-form zod
 
 ---
 
-### T004 [P]: Configure Firebase & Firestore
-**Description**: Set up Firebase config, initialize Firestore with offline persistence  
-**Actions**:
-- Create Firebase project in console (if not exists)
-- Generate Firebase config (API keys, project ID, etc.)
-- Create `src/config/firebase.ts`:
-  ```typescript
-  import { initializeApp } from 'firebase/app';
-  import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
-  import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
-  import AsyncStorage from '@react-native-async-storage/async-storage';
-
-  const firebaseConfig = { /* keys */ };
-  const app = initializeApp(firebaseConfig);
-  const auth = initializeAuth(app, { persistence: getReactNativePersistence(AsyncStorage) });
-  const db = getFirestore(app);
-  
-  enableIndexedDbPersistence(db).catch((err) => {
-    if (err.code === 'failed-precondition') {
-      console.warn('Offline persistence: Multiple tabs open');
-    } else if (err.code === 'unimplemented') {
-      console.warn('Offline persistence: Browser not supported');
-    }
-  });
-
-  export { app, auth, db };
-  ```
-- Add `.env` file with Firebase keys (gitignored)
-- Configure `app.json` with Firebase plugin
-
-**Files Created**: `src/config/firebase.ts`, `.env.example`  
-**Files Modified**: `app.json`, `.gitignore`  
-**Dependencies**: T002  
-**Validation**: Import firebase.ts without errors, verify offline persistence enabled
+### T004: ✅ Configure Firebase & Firestore
+**Status**: ✅ COMPLETED - 2025-10-06  
+**Configuration Created**:
+- ✅ src/config/firebase.ts - Firebase initialization with React Native Firebase
+- ✅ .env.example - Firebase credentials template
+- ✅ FIREBASE_SETUP.md - Complete setup guide with step-by-step instructions
+- ✅ app.json - Added Firebase plugins configuration
+- ✅ .gitignore - Added Firebase config files (GoogleService-Info.plist, google-services.json)
+**Key Features**:
+- Firestore offline persistence enabled (unlimited cache size)
+- Auth state automatically persisted to device storage
+- Cloud Messaging integration for push notifications
+- FHIR R4 compliance ready (Constitution Principle I)
+**Next Steps**:
+- User must create Firebase project in console
+- Download GoogleService-Info.plist (iOS) and google-services.json (Android)
+- Run `npx expo prebuild` to generate native projects
+- Deploy Firestore security rules from specs/contracts/firestore.rules
+**Validation**: TypeScript compiles with zero errors, Firebase services exported correctly
 
 ---
 

@@ -32,6 +32,7 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
 
 # typescript
 *.tsbuildinfo
@@ -39,3 +40,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Firebase configuration files (contain sensitive API keys)
+# These are generated per-developer from Firebase Console
+ios/GoogleService-Info.plist
+android/app/google-services.json
