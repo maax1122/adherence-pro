@@ -10,12 +10,7 @@
  * @see https://firebase.google.com/docs/reference/js/firestore_.firestoredataconverter
  */
 
-import {
-  DocumentSnapshot,
-  QueryDocumentSnapshot,
-  serverTimestamp,
-  FieldValue,
-} from 'firebase/firestore';
+import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import {
   PatientDocument,
   MedicationRequestDocument,
@@ -25,6 +20,12 @@ import {
   FamilyConnection,
   ReminderSchedule,
 } from '../../types/fhir';
+
+type DocumentSnapshot = FirebaseFirestoreTypes.DocumentSnapshot;
+type QueryDocumentSnapshot = FirebaseFirestoreTypes.QueryDocumentSnapshot;
+type FieldValue = FirebaseFirestoreTypes.FieldValue;
+
+const serverTimestamp = () => firestore.FieldValue.serverTimestamp();
 
 // ============================================================================
 // Patient Converter
