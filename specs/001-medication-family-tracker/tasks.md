@@ -135,37 +135,52 @@ npx expo install react-hook-form zod
 
 ---
 
-### T005 [P]: Set Up Testing Framework
-**Description**: Configure Jest, React Native Testing Library, Detox for E2E  
-**Actions**:
-- Install testing dependencies:
-  ```bash
-  npm install --save-dev jest @testing-library/react-native @testing-library/jest-native
-  npm install --save-dev detox detox-cli jest-circus
-  npm install --save-dev @firebase/rules-unit-testing
-  ```
-- Create `jest.config.js` with React Native preset
-- Create `detox.config.js` for E2E tests (iOS + Android simulators)
-- Create `tests/` directory structure:
-  ```
-  tests/
-  ├── unit/
-  ├── integration/
-  ├── contract/
-  └── e2e/
-  ```
-- Add test scripts to `package.json`:
-  ```json
-  "test": "jest",
-  "test:watch": "jest --watch",
-  "test:e2e": "detox test",
-  "test:rules": "firebase emulators:exec --only firestore \"npm run test:contract\""
-  ```
-
-**Files Created**: `jest.config.js`, `detox.config.js`, `tests/` structure  
-**Files Modified**: `package.json`  
-**Dependencies**: T002  
-**Validation**: `npm test` runs (no tests yet, should pass empty suite)
+### T005: ✅ Set Up Testing Framework
+**Status**: ✅ COMPLETED - 2025-10-06  
+**Testing Libraries Installed**:
+- ✅ Jest @30.1.0 + React Native Testing Library @13.3.3 (unit/integration)
+- ✅ Detox @20.28.4 + detox-expo-helpers (E2E)
+- ✅ Firebase Rules Unit Testing @3.2.0 (contract tests)
+- ✅ react-test-renderer@19.1.0 (matches React 19.1.0)
+- ✅ babel-preset-expo (Babel configuration for Jest)
+**Configuration Files Created**:
+- ✅ jest.config.js - React Native preset with transform ignore patterns
+- ✅ jest.setup.js - Global mocks (Firebase, AsyncStorage, Expo modules)
+- ✅ babel.config.js - Babel preset for Expo
+- ✅ .detoxrc.js - Detox config for iOS/Android simulators
+- ✅ e2e/jest.config.js - E2E test configuration
+- ✅ e2e/jest.setup.js - E2E test setup with Detox
+- ✅ tests/README.md - Comprehensive testing guide
+**Test Directory Structure**:
+```
+tests/
+├── unit/              # Unit tests (components, hooks, utils, services)
+├── integration/       # Integration tests (auth, firestore, features)
+├── contract/          # Contract tests (Firestore security rules)
+├── e2e/              # End-to-end tests (Detox)
+└── __mocks__/        # Global mocks (fileMock.js)
+```
+**Test Scripts Added**:
+- `npm test` - Run all tests (unit + integration + contract)
+- `npm run test:watch` - Watch mode
+- `npm run test:coverage` - Generate coverage report
+- `npm run test:unit` - Unit tests only
+- `npm run test:integration` - Integration tests only
+- `npm run test:contract` - Contract tests only
+- `npm run test:e2e:ios` - E2E tests on iOS simulator
+- `npm run test:e2e:android` - E2E tests on Android emulator
+- `npm run detox:build:ios` - Build iOS app for E2E
+- `npm run detox:build:android` - Build Android app for E2E
+**Context7 Documentation Reviewed**:
+- React Native Testing Library best practices (v13.x)
+- Detox React Native + Expo setup patterns
+- Jest configuration for React Native + TypeScript
+**Validation Results**:
+- ✅ Sample unit test passes (2/2 tests passing)
+- ✅ Jest compiles with zero errors
+- ✅ Coverage thresholds configured (80% statements/functions/lines, 75% branches)
+- ✅ All Firebase services mocked globally
+**Next Steps**: Begin Phase 3.2 - Write failing tests (T006-T015) before any implementation
 
 ---
 
