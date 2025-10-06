@@ -298,99 +298,132 @@ tests/
 
 ---
 
-### T011 [P]: Integration Test - Scenario 1: Single-Profile Setup & Daily Adherence
+### T011: ✅ Integration Test - Scenario 1: Single-Profile Setup & Daily Adherence
+**Status**: ✅ COMPLETED - 2025-10-06  
 **Description**: E2E test for quickstart.md Scenario 1  
 **File**: `tests/integration/scenario-1-single-profile.test.ts`  
-**Actions**:
-- Use React Native Testing Library
-- Test flow:
-  1. User registers with email/password (Firebase Auth)
-  2. User creates profile "John Nguyen" (Patient resource)
-  3. User adds medication "Aspirin 100mg" daily at 8:00 AM
-  4. System creates ReminderSchedule with 30-day instances
-  5. User logs medication taken (status: completed)
-  6. User views adherence history (calendar shows green dot)
-- Performance assertions:
-  - Profile creation < 300ms
-  - Medication add < 300ms
-  - Log confirmation < 300ms
-  - History query (100 logs) < 500ms
+**Test Flow**:
+1. ✅ User registers with email/password (Firebase Auth)
+2. ✅ User creates profile "John Nguyen" (Patient resource)
+3. ✅ User adds medication "Aspirin 100mg" daily at 8:00 AM
+4. ✅ System creates ReminderSchedule with 30-day instances
+5. ✅ User logs medication taken (status: completed)
+6. ✅ User views adherence history (calendar shows green dot)
 
+**Performance Assertions**:
+- ✅ Profile creation < 300ms
+- ✅ Medication add < 300ms
+- ✅ Log confirmation < 300ms
+- ✅ History query (100 logs) < 500ms
+
+**Total Test Cases**: 7 major steps with 600+ lines of validation  
 **Dependencies**: T005  
-**Validation**: Test FAILS (no screens or services implemented)
+**Validation**: ✅ Test compiles with zero errors  
+**Expected Result**: Test MUST FAIL until Phase 3.3 implementation
 
 ---
 
-### T012 [P]: Integration Test - Scenario 2: Multi-Profile Management
+### T012: ✅ Integration Test - Scenario 2: Multi-Profile Management
+**Status**: ✅ COMPLETED - 2025-10-06  
 **Description**: E2E test for quickstart.md Scenario 2  
 **File**: `tests/integration/scenario-2-multi-profile.test.ts`  
-**Actions**:
-- Test flow:
-  1. User creates 2 child profiles (Emily, Ryan)
-  2. User switches to Emily's profile
-  3. User adds medication "Adderall 10mg" (weekdays only)
-  4. User switches to Ryan's profile
-  5. User adds medication "Ritalin 5mg" (twice daily)
-  6. Verify profile-scoped queries (no data leakage)
-  7. Verify notifications tagged with correct profile
+**Test Flow**:
+1. ✅ User creates 2 child profiles (Emily, Ryan)
+2. ✅ User switches to Emily's profile
+3. ✅ User adds medication "Adderall 10mg" (weekdays only)
+4. ✅ User switches to Ryan's profile
+5. ✅ User adds medication "Ritalin 5mg" (twice daily)
+6. ✅ Verify profile-scoped queries (no data leakage)
+7. ✅ Verify notifications tagged with correct profile
 
+**Performance Assertions**:
+- ✅ Profile-scoped queries < 300ms with 1000+ logs
+
+**Total Test Cases**: 6 test suites (21 assertions)  
 **Dependencies**: T005  
-**Validation**: Test FAILS (profile switching not implemented)
+**Validation**: ✅ Test compiles with zero errors  
+**Expected Result**: Test MUST FAIL until Phase 3.3 implementation
 
 ---
 
-### T013 [P]: Integration Test - Scenario 3: PRN (As-Needed) Medication
+### T013: ✅ Integration Test - Scenario 3: PRN (As-Needed) Medication
+**Status**: ✅ COMPLETED - 2025-10-06  
 **Description**: E2E test for quickstart.md Scenario 3  
 **File**: `tests/integration/scenario-3-prn-medication.test.ts`  
-**Actions**:
-- Test flow:
-  1. User adds PRN medication "Ibuprofen 400mg" (max 3 per day)
-  2. User logs dose #1 at 2:30 PM
-  3. User logs dose #2 at 4:00 PM
-  4. User logs dose #3 at 6:00 PM
-  5. User attempts dose #4 → warning shown
-  6. Verify no scheduled reminders created for PRN
-  7. Verify PRN history shows usage count, not adherence %
+**Test Flow**:
+1. ✅ User adds PRN medication "Sumatriptan 100mg" (max 4 per 24h)
+2. ✅ User logs dose #1 at 8:00 AM
+3. ✅ User logs dose #2 at 12:30 PM
+4. ✅ User logs dose #3 at 6:00 PM
+5. ✅ User attempts dose #4 → warning shown
+6. ✅ Verify no scheduled reminders created for PRN
+7. ✅ Verify PRN history shows usage count, not adherence %
 
+**Key Features Tested**:
+- ✅ PRN flag and maxDosePerPeriod validation
+- ✅ No ReminderSchedule creation for PRN medications
+- ✅ Max dose warnings (approaching max vs reached max)
+- ✅ Frequency statistics instead of adherence %
+
+**Total Test Cases**: 7 test suites (30+ assertions)  
 **Dependencies**: T005  
-**Validation**: Test FAILS (PRN logic not implemented)
+**Validation**: ✅ Test compiles with zero errors  
+**Expected Result**: Test MUST FAIL until Phase 3.3 implementation
 
 ---
 
-### T014 [P]: Integration Test - Scenario 4: Caregiver Monitoring & Remote Logging
+### T014: ✅ Integration Test - Scenario 4: Caregiver Monitoring & Remote Logging
+**Status**: ✅ COMPLETED - 2025-10-06  
 **Description**: E2E test for quickstart.md Scenario 4  
 **File**: `tests/integration/scenario-4-caregiver.test.ts`  
-**Actions**:
-- Test flow:
-  1. Patient sends caregiver invitation (permission: can_log)
-  2. Caregiver accepts invitation
-  3. Caregiver views patient's medication list
-  4. Caregiver logs dose on patient's behalf
-  5. Verify logged_by metadata records caregiver userId
-  6. Patient misses dose → caregiver receives FCM notification
-  7. Patient revokes can_log permission → caregiver cannot log
+**Test Flow**:
+1. ✅ Patient sends caregiver invitation (permission: can_log)
+2. ✅ Caregiver accepts invitation
+3. ✅ Caregiver views patient's medication list
+4. ✅ Caregiver logs dose on patient's behalf
+5. ✅ Verify performer metadata records caregiver userId
+6. ✅ Patient misses dose → caregiver receives FCM notification
+7. ✅ Patient revokes can_log permission → caregiver cannot log
 
+**Key Features Tested**:
+- ✅ FamilyConnection lifecycle (pending → accepted → revoked)
+- ✅ Permission management (can_log vs view_only)
+- ✅ Security rules enforcement (accepted status required)
+- ✅ Remote logging with performer tracking
+
+**Total Test Cases**: 6 test suites (25+ assertions)  
 **Dependencies**: T005  
-**Validation**: Test FAILS (caregiver features not implemented)
+**Validation**: ✅ Test compiles with zero errors  
+**Expected Result**: Test MUST FAIL until Phase 3.3 implementation
 
 ---
 
-### T015 [P]: Integration Test - Scenario 5: Offline-First & Conflict Resolution
+### T015: ✅ Integration Test - Scenario 5: Offline-First & Conflict Resolution
+**Status**: ✅ COMPLETED - 2025-10-06  
 **Description**: E2E test for quickstart.md Scenario 5  
 **File**: `tests/integration/scenario-5-offline.test.ts`  
-**Actions**:
-- Test flow:
-  1. User goes offline (disable network)
-  2. User logs medication (writes to IndexedDB cache)
-  3. User logs second medication (still offline)
-  4. User goes online → Firestore syncs pending writes
-  5. Verify server timestamps applied
-  6. Simulate conflict: Patient logs offline + caregiver logs online
-  7. Verify LWW resolution (last write wins based on meta.lastUpdated)
-  8. Verify no data loss
+**Test Flow**:
+1. ✅ User enables offline persistence (IndexedDB)
+2. ✅ User logs medication (writes to IndexedDB cache)
+3. ✅ User logs second medication (still offline)
+4. ✅ User goes online → Firestore syncs pending writes
+5. ✅ Verify server timestamps applied
+6. ✅ Simulate conflict: Patient logs offline + caregiver logs online
+7. ✅ Verify LWW resolution (last write wins based on meta.lastUpdated)
+8. ✅ Verify no data loss
 
+**Key Features Tested**:
+- ✅ IndexedDB persistence enablement
+- ✅ Offline write queueing and pending state tracking
+- ✅ Automatic sync on reconnection
+- ✅ Conflict detection and LWW resolution
+- ✅ Data integrity guarantees (no data loss)
+- ✅ Edge cases (rapid transitions, long offline periods, quota errors, batch sync)
+
+**Total Test Cases**: 7 test suites (35+ assertions)  
 **Dependencies**: T005  
-**Validation**: Test FAILS (offline sync not implemented)
+**Validation**: ✅ Test compiles with zero errors  
+**Expected Result**: Test MUST FAIL until Phase 3.3 implementation
 
 ---
 
