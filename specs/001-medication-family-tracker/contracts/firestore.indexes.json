@@ -1,0 +1,122 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "patients",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "active", "order": "ASCENDING" },
+        { "fieldPath": "meta.lastUpdated", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "medication_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "patientId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "authoredOn", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "medication_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "dispenseRequest.validityPeriod.end", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "medication_administrations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "medicationRequestId", "order": "ASCENDING" },
+        { "fieldPath": "effectiveDateTime", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "medication_administrations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "patientId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "effectiveDateTime", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "medication_administrations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "medicationRequestId", "order": "ASCENDING" },
+        { "fieldPath": "scheduledTime", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "family_connections",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "patientUserId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "family_connections",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "caregiverUserId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reminder_schedules",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "isEnabled", "order": "ASCENDING" },
+        { "fieldPath": "effectiveDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reminder_schedules",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "medicationRequestId", "order": "ASCENDING" },
+        { "fieldPath": "nextComputeAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reminder_schedules",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "instances.scheduledTime", "order": "ASCENDING" },
+        { "fieldPath": "instances.notificationSent", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "medication_administrations",
+      "fieldPath": "effectiveDateTime",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" }
+      ]
+    },
+    {
+      "collectionGroup": "reminder_schedules",
+      "fieldPath": "instances",
+      "indexes": [
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" }
+      ]
+    }
+  ]
+}
