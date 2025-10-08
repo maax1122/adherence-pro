@@ -1,0 +1,278 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================================================
+    // HELPER FUNCTIONS
+    // ============================================================================
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if user owns the resource
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Check if user is a caregiver for a specific patient with accepted connection
+    function isCaregiver(patientId) {
+      return isAuthenticated() && 
+        existsAfter(/databases/$(database)/documents/family_connections/$(getConnectionId(patientId))) &&
+        getAfter(/databases/$(database)/documents/family_connections/$(getConnectionId(patientId))).data.status == 'accepted';
+    }
+    
+    // Helper to construct family connection ID
+    function getConnectionId(patientId) {
+      return request.auth.uid + '_' + patientId;
+    }
+    
+    // Check if caregiver has can_log permission for patient
+    function caregiverCanLog(patientId) {
+      let connectionPath = /databases/$(database)/documents/family_connections/$(getConnectionId(patientId));
+      return isAuthenticated() &&
+        existsAfter(connectionPath) &&
+        getAfter(connectionPath).data.status == 'accepted' &&
+        'can_log' in getAfter(connectionPath).data.permissions;
+    }
+    
+    // Check if caregiver has any permission (can view)
+    function caregiverCanView(patientId) {
+      let connectionPath = /databases/$(database)/documents/family_connections/$(getConnectionId(patientId));
+      return isAuthenticated() &&
+        existsAfter(connectionPath) &&
+        getAfter(connectionPath).data.status == 'accepted' &&
+        getAfter(connectionPath).data.permissions.size() > 0;
+    }
+    
+    // Check if edit is within 24-hour window
+    function withinEditWindow() {
+      return request.time < resource.data.createdAt + duration.value(24, 'h');
+    }
+    
+    // Validate FHIR Patient resource
+    function validPatient() {
+      let data = request.resource.data;
+      return data.resourceType == 'Patient' &&
+        data.active is bool &&
+        data.userId == request.auth.uid &&
+        data.name is list && data.name.size() > 0 &&
+        data.id is string;
+    }
+    
+    // Validate FHIR MedicationRequest resource
+    function validMedicationRequest() {
+      let data = request.resource.data;
+      return data.resourceType == 'MedicationRequest' &&
+        data.status in ['active', 'on-hold', 'cancelled', 'completed', 'entered-in-error', 'stopped', 'draft', 'unknown'] &&
+        data.intent in ['proposal', 'plan', 'order', 'original-order', 'reflex-order', 'filler-order', 'instance-order', 'option'] &&
+        data.medicationCodeableConcept is map &&
+        data.subject is map &&
+        data.subject.reference is string &&
+        data.userId is string &&
+        data.patientId is string;
+    }
+    
+    // Validate FHIR MedicationAdministration resource
+    function validMedicationAdministration() {
+      let data = request.resource.data;
+      return data.resourceType == 'MedicationAdministration' &&
+        data.status in ['in-progress', 'not-done', 'on-hold', 'completed', 'entered-in-error', 'stopped', 'unknown'] &&
+        data.medicationRequestId is string &&
+        data.effectiveDateTime is timestamp &&
+        data.userId is string &&
+        data.patientId is string;
+    }
+    
+    // Validate FamilyConnection resource
+    function validFamilyConnection() {
+      let data = request.resource.data;
+      return data.patientUserId is string &&
+        data.caregiverEmail is string &&
+        data.patientId is string &&
+        data.status in ['pending', 'accepted', 'rejected', 'revoked'] &&
+        data.permissions is list &&
+        data.permissions.size() > 0 &&
+        data.invitedAt is timestamp &&
+        data.invitedBy is string;
+    }
+    
+    // Validate ReminderSchedule resource
+    function validReminderSchedule() {
+      let data = request.resource.data;
+      return data.userId is string &&
+        data.patientId is string &&
+        data.medicationRequestId is string &&
+        data.medicationName is string &&
+        data.timing is map &&
+        data.isPRN is bool &&
+        data.isEnabled is bool &&
+        data.instances is list &&
+        data.generatedAt is timestamp;
+    }
+    
+    // ============================================================================
+    // FHIR PATIENTS (PROFILES)
+    // ============================================================================
+    
+    match /patients/{patientId} {
+      // Users can read/write their own patient records
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && validPatient();
+      allow update: if isAuthenticated() && isOwner(resource.data.userId) && validPatient();
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+      
+      // Caregivers can read patient records they monitor
+      allow read: if isAuthenticated() && caregiverCanView(patientId);
+    }
+    
+    // ============================================================================
+    // FHIR MEDICATION REQUESTS
+    // ============================================================================
+    
+    match /medication_requests/{medicationRequestId} {
+      // Owners can read/write their own medication requests
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && 
+        isOwner(request.resource.data.userId) && 
+        validMedicationRequest();
+      allow update: if isAuthenticated() && 
+        isOwner(resource.data.userId) && 
+        validMedicationRequest();
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+      
+      // Caregivers can read
+      allow read: if isAuthenticated() && caregiverCanView(resource.data.patientId);
+      
+      // Caregivers with 'can_log' permission can create/update
+      allow create, update: if isAuthenticated() && 
+        caregiverCanLog(request.resource.data.patientId) && 
+        validMedicationRequest();
+    }
+    
+    // ============================================================================
+    // FHIR MEDICATION ADMINISTRATIONS (DOSE LOGS)
+    // ============================================================================
+    
+    match /medication_administrations/{administrationId} {
+      // Owners can read their own logs
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      
+      // Owners can create logs (effectiveDateTime must be <= now)
+      allow create: if isAuthenticated() && 
+        isOwner(request.resource.data.userId) &&
+        validMedicationAdministration() &&
+        request.resource.data.effectiveDateTime <= request.time;
+      
+      // Owners can update within 24-hour window
+      allow update: if isAuthenticated() && 
+        isOwner(resource.data.userId) && 
+        withinEditWindow() &&
+        validMedicationAdministration();
+      
+      // Delete allowed for owners (soft delete via status)
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+      
+      // Caregivers can read logs for patients they monitor
+      allow read: if isAuthenticated() && caregiverCanView(resource.data.patientId);
+      
+      // Caregivers with 'can_log' permission can create/update logs
+      allow create: if isAuthenticated() && 
+        caregiverCanLog(request.resource.data.patientId) &&
+        validMedicationAdministration() &&
+        request.resource.data.effectiveDateTime <= request.time;
+        
+      allow update: if isAuthenticated() && 
+        caregiverCanLog(resource.data.patientId) &&
+        withinEditWindow() &&
+        validMedicationAdministration();
+    }
+    
+    // ============================================================================
+    // REMINDER SCHEDULES
+    // ============================================================================
+    
+    match /reminder_schedules/{scheduleId} {
+      // Only owners can manage reminder schedules
+      allow read: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && 
+        isOwner(request.resource.data.userId) && 
+        validReminderSchedule();
+      allow update: if isAuthenticated() && 
+        isOwner(resource.data.userId) && 
+        validReminderSchedule();
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+      
+      // Caregivers with can_log can update instances (mark completed/missed)
+      allow update: if isAuthenticated() && 
+        caregiverCanLog(resource.data.patientId) &&
+        validReminderSchedule();
+    }
+    
+    // ============================================================================
+    // FAMILY CONNECTIONS (CAREGIVER INVITATIONS)
+    // ============================================================================
+    
+    match /family_connections/{connectionId} {
+      // Patient can read their own connections
+      allow read: if isAuthenticated() && 
+        request.auth.uid == resource.data.patientUserId;
+      
+      // Caregiver can read connections where they are the caregiver
+      allow read: if isAuthenticated() && 
+        request.auth.uid == resource.data.caregiverUserId;
+      
+      // Caregiver can read pending invitations sent to their email
+      allow read: if isAuthenticated() && 
+        resource.data.status == 'pending' &&
+        resource.data.caregiverEmail == request.auth.token.email;
+      
+      // Only patient can create invitation
+      allow create: if isAuthenticated() &&
+        request.resource.data.patientUserId == request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        validFamilyConnection();
+      
+      // Caregiver can accept/reject pending invitation
+      allow update: if isAuthenticated() &&
+        request.auth.uid == request.resource.data.caregiverUserId &&
+        resource.data.status == 'pending' &&
+        request.resource.data.status in ['accepted', 'rejected'] &&
+        validFamilyConnection();
+      
+      // Patient can update permissions on accepted connection
+      allow update: if isAuthenticated() &&
+        request.auth.uid == resource.data.patientUserId &&
+        resource.data.status == 'accepted' &&
+        request.resource.data.status == 'accepted' &&
+        validFamilyConnection();
+      
+      // Patient can revoke accepted connection
+      allow update: if isAuthenticated() &&
+        request.auth.uid == resource.data.patientUserId &&
+        resource.data.status == 'accepted' &&
+        request.resource.data.status == 'revoked' &&
+        validFamilyConnection();
+      
+      // Caregiver can revoke accepted connection
+      allow update: if isAuthenticated() &&
+        request.auth.uid == resource.data.caregiverUserId &&
+        resource.data.status == 'accepted' &&
+        request.resource.data.status == 'revoked' &&
+        validFamilyConnection();
+      
+      // Patient can delete their own connections
+      allow delete: if isAuthenticated() && 
+        request.auth.uid == resource.data.patientUserId;
+    }
+    
+    // ============================================================================
+    // DENY ALL OTHER COLLECTIONS
+    // ============================================================================
+    
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
