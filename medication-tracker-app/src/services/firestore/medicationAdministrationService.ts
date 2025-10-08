@@ -83,8 +83,11 @@ export async function logMedication(
   
   if (!isOwner) {
     // Check if performer is a caregiver with can_log permission
-    // This will be fully implemented when FamilyConnection service is ready (T023)
-    throw new Error('User does not have permission to log this medication');
+    const { canCaregiverLog } = await import('./familyConnectionService');
+    const hasPermission = await canCaregiverLog(performerUserId, medRequest.patientId);
+    if (!hasPermission) {
+      throw new Error('User does not have permission to log this medication');
+    }
   }
 
   // Validate effectiveDateTime <= now

@@ -327,7 +327,8 @@ export interface CareTeamDocument extends FHIRCareTeam {
 export interface FamilyConnection {
   id: string;
   patientUserId: string; // Firebase Auth UID of patient
-  caregiverUserId: string; // Firebase Auth UID of caregiver
+  caregiverUserId: string; // Firebase Auth UID of caregiver (empty until accepted)
+  caregiverEmail: string; // Email address for invitation
   patientId: string; // FHIR Patient resource ID
   
   // Status lifecycle
