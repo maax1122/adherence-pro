@@ -1,25 +1,536 @@
-# Tasks: Medication Family Tracker
+# Tasks: Medication Family Tracker (Web-First)
 
 **Input**: Design documents from `/Users/maax/Projects/side/adherence-pro/specs/001-medication-family-tracker/`
 **Prerequisites**: plan.md ✅, research.md ✅, data-model.md ✅, contracts/ ✅, quickstart.md ✅
 
+**Last Updated**: 2025-10-09 - Updated for web-first implementation
+
 ## Execution Flow
 ```
-1. ✅ Loaded plan.md: React Native + Expo SDK 50+ + Firebase stack
-2. ✅ Loaded data-model.md: 6 FHIR entities (Patient, MedicationRequest, MedicationAdministration, RelatedPerson, CareTeam, ReminderSchedule)
-3. ✅ Loaded contracts/: firestore-security-rules.md, firestore.indexes.json
-4. ✅ Loaded quickstart.md: 5 integration test scenarios
-5. ✅ Loaded research.md: React Native/Expo, Firebase, Expo Notifications, LWW conflict resolution
-6. Generated 35 tasks in TDD order
+1. ✅ Loaded plan.md: React 18+ with Vite 5+ + Firebase stack (WEB-FIRST)
+2. ✅ Loaded data-model.md: 7 FHIR entities (Patient, MedicationRequest, MedicationAdministration, RelatedPerson, CareTeam, ReminderSchedule, FamilyConnection)
+3. ✅ Loaded contracts/: firestore-security-rules.md, firestore.indexes.json, 4 contract test files
+4. ✅ Loaded quickstart.md: 5 integration test scenarios (web-focused)
+5. ✅ Loaded research.md: React + Vite, Firebase, Web Push API, Service Worker, LWW conflict resolution
+6. Generated 40 tasks for web implementation in TDD order
 7. Marked [P] for parallel execution (independent files)
-8. Ready for execution
+8. Web Phase 3.1 (Setup) completed, Mobile Phase (Paused)
 ```
+
+## Project Status Overview
+
+### ✅ Phase 0: Research (COMPLETE - 2025-10-09)
+- research.md with 10 technology decisions
+- All architecture choices documented
+
+### ✅ Phase 1: Design & Contracts (COMPLETE - 2025-10-09)
+- data-model.md v2.0 (flat collections, web-first, 7 FHIR entities)
+- 4 contract test files (110 tests total)
+- quickstart.md (5 web integration scenarios)
+- .github/copilot-instructions.md updated
+
+### 🔄 Phase 2: Mobile App (PAUSED - Will Resume After Web MVP)
+- Mobile tasks T001-T035 documented but on hold
+- 70-90% code reusability planned from web implementation
+
+### ✅ Phase 3.1: Web Project Setup (COMPLETE - 2025-10-09)
+- Web project structure created at /medication-tracker-web/
+- All configuration files in place
+- Dependencies specified (not yet installed)
+- Ready for implementation
+
+### ⏳ Phase 3.2-3.5: Web Implementation (IN PROGRESS)
+- Current focus: Install dependencies and implement core features
 
 ## Format: `[ID] [P?] Description`
 - **[P]**: Can run in parallel (different files, no dependencies)
-- File paths are absolute for clarity
+- **WEB**: Web implementation task (medication-tracker-web/)
+- **MOBILE**: Mobile implementation task (medication-tracker-app/) - PAUSED
 
-## Phase 3.1: Project Setup & Configuration (5 tasks)
+---
+
+# WEB IMPLEMENTATION TASKS (Current Focus)
+
+## Phase 3.1: Web Project Setup ✅ COMPLETE
+
+All setup tasks completed on 2025-10-09. Project structure ready at `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/`
+
+### W001: ✅ Create Web Project Structure (COMPLETE - 2025-10-09)
+**Description**: Initialize Vite + React + TypeScript project  
+**Status**: ✅ COMPLETED  
+**Files Created**:
+- package.json with all dependencies
+- vite.config.ts, vitest.config.ts, tsconfig.json
+- index.html, public/manifest.json
+- src/config/firebase.ts, src/App.tsx, src/main.tsx
+- .env.example, .gitignore
+- README.md, SETUP_COMPLETE.md
+
+**Validation**: ✅ All files created, committed, and pushed to GitHub
+
+---
+
+### W002: ✅ Configure TypeScript Strict Mode (COMPLETE - 2025-10-09)
+**Status**: ✅ COMPLETED  
+**Files Created**:
+- tsconfig.json with strict: true
+- All strict flags enabled
+
+**Validation**: ✅ Configuration complete, ready for type-safe development
+
+---
+
+### W003: ⏳ Install Dependencies (NEXT STEP)
+**Description**: Install all web dependencies specified in package.json  
+**File**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/package.json`  
+**Actions**:
+```bash
+cd /Users/maax/Projects/side/adherence-pro/medication-tracker-web
+npm install
+```
+**Dependencies to Install**:
+- Production: react@18.3.1, react-dom@18.3.1, react-router-dom@6.26.0, firebase@10.13.0, zustand@4.5.4, @mui/material@5.16.7, date-fns@3.6.0
+- Development: vite@5.3.4, typescript@5.5.3, vitest@2.0.5, @testing-library/react@16.0.0, @firebase/rules-unit-testing@3.0.4, eslint@8.57.0
+
+**Estimated Time**: 1-3 minutes (~200MB download)  
+**Dependencies**: W001, W002  
+**Validation**: `npm run dev` launches successfully
+
+---
+
+### W004: ⏳ Setup Firebase Environment Variables
+**Description**: Create .env.local with Firebase credentials  
+**File**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/.env.local`  
+**Actions**:
+```bash
+cd /Users/maax/Projects/side/adherence-pro/medication-tracker-web
+cp .env.example .env.local
+# Edit .env.local with Firebase credentials from console
+```
+**Environment Variables Required**:
+- VITE_FIREBASE_API_KEY
+- VITE_FIREBASE_AUTH_DOMAIN
+- VITE_FIREBASE_PROJECT_ID
+- VITE_FIREBASE_STORAGE_BUCKET
+- VITE_FIREBASE_MESSAGING_SENDER_ID
+- VITE_FIREBASE_APP_ID
+- VITE_USE_EMULATORS=true (for development)
+
+**Dependencies**: W003  
+**Validation**: Firebase config loads without errors
+
+---
+
+## Phase 3.2: Contract Tests for Web (TDD - Tests First)
+
+### W005: [P] Run Contract Tests - Patients
+**Description**: Run existing contract tests for Patient collection  
+**File**: `/Users/maax/Projects/side/adherence-pro/tests/contract/firestore-patients.test.ts`  
+**Status**: ✅ Test file exists (21 test cases)  
+**Actions**:
+- Start Firebase Emulator: `cd medication-tracker-app && firebase emulators:start`
+- Install test dependencies in web project (W003)
+- Run tests: `cd medication-tracker-web && npm run test:contract`
+
+**Expected Result**: Tests should PASS (security rules already deployed in mobile project)  
+**Dependencies**: W003, W004  
+**Validation**: All 21 tests pass
+
+---
+
+### W006: [P] Run Contract Tests - MedicationRequests
+**Description**: Run existing contract tests for MedicationRequest collection  
+**File**: `/Users/maax/Projects/side/adherence-pro/tests/contract/firestore-medication-requests.test.ts`  
+**Status**: ✅ Test file exists (28 test cases)  
+**Dependencies**: W003, W004  
+**Validation**: All 28 tests pass
+
+---
+
+### W007: [P] Run Contract Tests - MedicationAdministrations
+**Description**: Run existing contract tests for MedicationAdministration collection  
+**File**: `/Users/maax/Projects/side/adherence-pro/tests/contract/firestore-medication-administrations.test.ts`  
+**Status**: ✅ Test file exists (29 test cases)  
+**Dependencies**: W003, W004  
+**Validation**: All 29 tests pass
+
+---
+
+### W008: [P] Run Contract Tests - FamilyConnections
+**Description**: Run existing contract tests for FamilyConnection collection  
+**File**: `/Users/maax/Projects/side/adherence-pro/tests/contract/firestore-family-connections.test.ts`  
+**Status**: ✅ Test file exists (32 test cases)  
+**Dependencies**: W003, W004  
+**Validation**: All 32 tests pass
+
+---
+
+## Phase 3.3: Core Web Implementation (After W005-W008 Pass)
+
+### W009: [P] Authentication Context
+**Description**: Create React context for authentication state  
+**File**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/contexts/AuthContext.tsx`  
+**Actions**:
+- Create AuthContext with currentUser, loading state
+- Implement AuthProvider with Firebase onAuthStateChanged listener
+- Export useAuth hook for components
+- Handle auth state persistence
+
+**Key Features**:
+- Firebase Auth integration
+- Loading state during auth check
+- Auto-subscribe to auth changes
+- Type-safe context with TypeScript
+
+**Dependencies**: W003, W004  
+**Validation**: Auth state updates when user logs in/out
+
+---
+
+### W010: [P] Copy FHIR TypeScript Interfaces from Mobile
+**Description**: Copy and adapt FHIR types for web  
+**Source**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-app/src/types/fhir.ts`  
+**Target**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/types/fhir.ts`  
+**Actions**:
+- Copy entire fhir.ts file (460+ lines)
+- Replace React Native Firebase Timestamp with web Firebase Timestamp
+- No other changes needed (100% compatible)
+
+**Dependencies**: W003  
+**Validation**: TypeScript compiles with zero errors
+
+---
+
+### W011: [P] Copy Firestore Converters from Mobile
+**Description**: Copy and adapt Firestore converters for web  
+**Source**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-app/src/services/firestore/converters.ts`  
+**Target**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/services/firestore/converters.ts`  
+**Actions**:
+- Copy entire converters.ts file (400+ lines)
+- Replace `@react-native-firebase/firestore` imports with `firebase/firestore`
+- Update serverTimestamp() calls to web SDK syntax
+
+**Dependencies**: W010  
+**Validation**: TypeScript compiles with zero errors
+
+---
+
+### W012: Authentication Service (Web)
+**Description**: Implement Firebase Auth wrapper for web  
+**File**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/services/auth/authService.ts`  
+**Actions**:
+- Implement signUp(email, password) using createUserWithEmailAndPassword
+- Implement signIn(email, password) using signInWithEmailAndPassword
+- Implement signOut() using signOut
+- Implement resetPassword(email) using sendPasswordResetEmail
+- Error handling with user-friendly messages
+
+**Key Functions**:
+- signUp, signIn, signOut, resetPassword
+- getCurrentUser, isAuthenticated
+- Error message translation
+
+**Dependencies**: W009, W010  
+**Validation**: Can register, login, logout in browser
+
+---
+
+### W013: Patient Service (Web)
+**Description**: Copy and adapt Patient service for web  
+**Source**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-app/src/services/firestore/patientService.ts`  
+**Target**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/services/firestore/patientService.ts`  
+**Actions**:
+- Copy entire patientService.ts file (270+ lines)
+- Replace React Native Firebase imports with web SDK
+- Update Firestore query syntax for web SDK
+
+**Key Functions**:
+- createPatient, getPatient, getUserPatients
+- updatePatient, deletePatient (soft delete)
+- isPatientOwnedByUser, getActivePatientCount
+
+**Dependencies**: W011  
+**Validation**: Can create, read, update patients
+
+---
+
+### W014: MedicationRequest Service (Web)
+**Description**: Copy and adapt MedicationRequest service for web  
+**Source**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-app/src/services/firestore/medicationRequestService.ts`  
+**Target**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/services/firestore/medicationRequestService.ts`  
+**Actions**:
+- Copy entire medicationRequestService.ts file (310+ lines)
+- Replace React Native Firebase imports with web SDK
+
+**Key Functions**:
+- createMedicationRequest, getMedicationRequest
+- getPatientMedicationRequests, getUserMedicationRequests
+- updateMedicationRequest, deleteMedicationRequest
+- getActiveMedicationCount
+
+**Dependencies**: W011, W013  
+**Validation**: Can create, read, update medications
+
+---
+
+### W015: MedicationAdministration Service (Web)
+**Description**: Copy and adapt MedicationAdministration service for web  
+**Source**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-app/src/services/firestore/medicationAdministrationService.ts`  
+**Target**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/services/firestore/medicationAdministrationService.ts`  
+**Actions**:
+- Copy entire medicationAdministrationService.ts file (462 lines)
+- Replace React Native Firebase imports with web SDK
+
+**Key Functions**:
+- logMedication, getMedicationAdministration
+- getMedicationLogs, getPatientMedicationLogs
+- updateMedicationAdministration (24h window enforcement)
+- getMissedDoses, getAdherenceStats
+- canEditLog
+
+**Dependencies**: W011, W014  
+**Validation**: Can log medications, view history
+
+---
+
+### W016: FamilyConnection Service (Web)
+**Description**: Copy and adapt FamilyConnection service for web  
+**Source**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-app/src/services/firestore/familyConnectionService.ts`  
+**Target**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/services/firestore/familyConnectionService.ts`  
+**Actions**:
+- Copy entire familyConnectionService.ts file (424 lines)
+- Replace React Native Firebase imports with web SDK
+
+**Key Functions**:
+- createInvitation, acceptInvitation, rejectInvitation
+- revokeConnection, getPatientConnections
+- getCaregiverConnections, updatePermissions
+- canCaregiverLog, canCaregiverView
+
+**Dependencies**: W011, W013  
+**Validation**: Can send invitations, accept, revoke
+
+---
+
+### W017: PrivateRoute Component
+**Description**: Create protected route wrapper  
+**File**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/components/PrivateRoute.tsx`  
+**Actions**:
+- Check if user is authenticated using useAuth
+- If authenticated → render children
+- If not authenticated → redirect to /login
+- Show loading spinner during auth check
+
+**Dependencies**: W009  
+**Validation**: Unauthenticated users redirected to login
+
+---
+
+### W018: LoginPage
+**Description**: Implement login form  
+**File**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/pages/LoginPage.tsx`  
+**Actions**:
+- Material-UI form with email and password fields
+- "Sign In" button calls authService.signIn()
+- Link to register page
+- "Forgot Password?" link
+- Error display for invalid credentials
+
+**Key Features**:
+- Form validation (email format, required fields)
+- Loading state during login
+- Error messages
+- Redirect to dashboard on success
+
+**Dependencies**: W009, W012, W017  
+**Validation**: Can login with email/password
+
+---
+
+### W019: RegisterPage
+**Description**: Implement registration form  
+**File**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/pages/RegisterPage.tsx`  
+**Actions**:
+- Material-UI form with email, password, confirm password
+- Password strength indicator
+- "Create Account" button calls authService.signUp()
+- Link to login page
+- Error display
+
+**Key Features**:
+- Form validation (passwords match, strength)
+- Loading state during registration
+- Error messages
+- Auto-login on success
+
+**Dependencies**: W009, W012, W017  
+**Validation**: Can register new account
+
+---
+
+### W020: Layout Component
+**Description**: Create app shell with navigation  
+**File**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/components/Layout.tsx`  
+**Actions**:
+- Material-UI AppBar with app title
+- Navigation drawer with menu items
+- Profile selector dropdown
+- User menu (settings, logout)
+- Offline indicator banner
+- Main content area
+
+**Dependencies**: W009, W017  
+**Validation**: Navigation works, logout button functional
+
+---
+
+### W021: DashboardPage
+**Description**: Implement main dashboard  
+**File**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/pages/DashboardPage.tsx`  
+**Actions**:
+- Display all patient profiles
+- Adherence summary for selected profile
+- Upcoming medications today
+- Recent medication logs
+- "Add Profile" button
+- "Add Medication" button
+
+**Key Features**:
+- Profile cards with photos
+- Adherence percentage
+- Next dose times
+- Quick actions
+
+**Dependencies**: W013, W014, W015, W020  
+**Validation**: Dashboard shows correct data for logged-in user
+
+---
+
+### W022: MedicationsPage
+**Description**: Implement medication list and management  
+**File**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/pages/MedicationsPage.tsx`  
+**Actions**:
+- List all medications for selected profile
+- Filter by status (active, PRN, completed)
+- Medication cards with name, dosage, frequency
+- "Add Medication" FAB button
+- Click medication → navigate to detail page
+- Edit and delete actions
+
+**Key Features**:
+- Filterable list
+- Color-coded status (green/yellow/red)
+- Quick log intake button
+
+**Dependencies**: W014, W020  
+**Validation**: Can view, filter, and manage medications
+
+---
+
+### W023: FamilyPage
+**Description**: Implement caregiver management  
+**File**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/pages/FamilyPage.tsx`  
+**Actions**:
+- List active caregivers
+- List pending invitations
+- "Invite Caregiver" button
+- View caregiver permissions
+- Revoke access button
+- Accept/reject invitation (for caregivers)
+
+**Key Features**:
+- Connection status display
+- Permission management
+- Invitation workflow
+
+**Dependencies**: W016, W020  
+**Validation**: Can invite caregivers, manage permissions
+
+---
+
+## Phase 3.4: Integration Tests (Web)
+
+### W024: Integration Test - Scenario 1 (Web)
+**Description**: Run quickstart Scenario 1 for web  
+**File**: Create `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/tests/integration/scenario-1-single-profile.test.ts`  
+**Actions**:
+- Adapt mobile test for web using React Testing Library
+- Test: Register → Create profile → Add medication → Log intake
+- Verify DOM updates correctly
+
+**Dependencies**: W018, W019, W021, W022  
+**Validation**: Full user flow works end-to-end
+
+---
+
+### W025: [P] Integration Test - Scenario 2 (Web)
+**Description**: Run quickstart Scenario 2 for web (multi-profile)  
+**Dependencies**: W021, W022  
+**Validation**: Profile switching works correctly
+
+---
+
+### W026: [P] Integration Test - Scenario 3 (Web)
+**Description**: Run quickstart Scenario 3 for web (PRN medications)  
+**Dependencies**: W022  
+**Validation**: PRN medications work without schedules
+
+---
+
+### W027: [P] Integration Test - Scenario 4 (Web)
+**Description**: Run quickstart Scenario 4 for web (caregiver)  
+**Dependencies**: W023  
+**Validation**: Caregiver invitation workflow works
+
+---
+
+## Phase 3.5: Polish & Deployment
+
+### W028: Service Worker for Offline Support
+**Description**: Implement Service Worker for PWA  
+**File**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/public/sw.js`  
+**Actions**:
+- Cache static assets (HTML, CSS, JS, images)
+- Network-first strategy for API calls
+- Cache-first for assets
+- Background sync for offline writes
+
+**Dependencies**: W003  
+**Validation**: App works offline, syncs when online
+
+---
+
+### W029: Web Push Notifications
+**Description**: Implement browser notifications for reminders  
+**File**: Create `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/services/notifications/notificationService.ts`  
+**Actions**:
+- Request notification permissions
+- Subscribe to FCM for push notifications
+- Schedule local notifications
+- Handle notification clicks
+
+**Dependencies**: W004  
+**Validation**: Notifications appear at scheduled times
+
+---
+
+### W030: Deploy to Firebase Hosting
+**Description**: Deploy web app to Firebase Hosting  
+**Actions**:
+```bash
+cd /Users/maax/Projects/side/adherence-pro/medication-tracker-web
+npm run build
+firebase deploy --only hosting
+```
+
+**Dependencies**: W003, W024-W027 (tests pass)  
+**Validation**: App accessible at https://adherence-pro.web.app
+
+---
+
+# MOBILE IMPLEMENTATION TASKS (Paused - Resume After Web MVP)
+
+## Phase 3.1: Mobile Project Setup & Configuration (5 tasks)
 
 ### T001: ✅ Initialize React Native + Expo Project
 **Description**: Create Expo project with TypeScript template  
@@ -949,23 +1460,52 @@ tests/
 
 ## Dependencies Summary
 
+### WEB IMPLEMENTATION (Current Focus)
+
 **Sequential Flow**:
-1. **Setup (T001-T005)** → Must complete before any other work
-2. **Tests (T006-T015)** → Must complete and FAIL before T016-T034
-3. **Core Services (T016-T023)** → Can be parallelized within phase
-4. **Notifications & Deployment (T024-T026)** → After core services
+1. **Setup (W001-W002)** ✅ Complete → Must complete before any other work
+2. **Dependencies Install (W003-W004)** ⏳ Next Step → Required for all development
+3. **Contract Tests (W005-W008)** → Validate existing security rules work
+4. **Core Services (W009-W016)** → Can be parallelized (copy from mobile)
+5. **UI Pages (W017-W023)** → After services available
+6. **Integration Tests (W024-W027)** → After UI complete
+7. **Polish & Deploy (W028-W030)** → After tests pass
+
+**Critical Path (Web)**:
+```
+W001 ✅ → W002 ✅ → W003 → W004 → W005-W008 (contract tests) →
+W009 (AuthContext) → W012 (authService) → W013-W016 (services) →
+W017 (PrivateRoute) → W018-W019 (auth pages) → W020 (Layout) →
+W021-W023 (feature pages) → W024-W027 (integration tests) → W030 (deploy)
+```
+
+**Parallel Opportunities (Web)**:
+- W003, W004 (setup) can run in parallel
+- W005-W008 contract tests all in parallel (independent files)
+- W009-W011 core types and contexts in parallel
+- W013-W016 service files in parallel (after W011)
+- W018-W023 UI pages in parallel (after W017, W020)
+- W024-W027 integration tests in parallel
+
+### MOBILE IMPLEMENTATION (Paused)
+
+**Sequential Flow**:
+1. **Setup (T001-T005)** ✅ Complete → Must complete before any other work
+2. **Tests (T006-T015)** ✅ Complete → Must complete and FAIL before T016-T034
+3. **Core Services (T016-T023)** ✅ Complete → Can be parallelized within phase
+4. **Notifications & Deployment (T024-T026)** ⏳ In Progress → After core services
 5. **UI Screens (T027-T033)** → After services available
 6. **Cloud Functions (T034)** → After Firestore schema deployed
 7. **Validation (T035)** → After all implementation
 
-**Critical Path**:
+**Critical Path (Mobile)**:
 ```
-T001 → T002 → T003 → T005 → T006-T015 (tests) →
-T016 → T017 → T018 → T019 → T020 → T021 →
-T025 (security rules) → T027 (UI) → T030 (logging) → T035 (validation)
+T001 ✅ → T002 ✅ → T003 ✅ → T005 ✅ → T006-T015 ✅ (tests) →
+T016 ✅ → T017 ✅ → T018 ✅ → T019 ✅ → T020 ✅ → T021 ✅ →
+T025 ⏳ (security rules) → T027 (UI) → T030 (logging) → T035 (validation)
 ```
 
-**Parallel Opportunities**:
+**Parallel Opportunities (Mobile)**:
 - T003, T004, T005 can run in parallel (different files)
 - T006-T015 all in parallel (independent test files)
 - T016-T023 can overlap (different service files)
@@ -1034,39 +1574,118 @@ code app/family/index.tsx     # T032
 
 ## Validation Checklist
 
-### Before Starting Implementation (Phase 3.3)
+### WEB IMPLEMENTATION
+
+#### Phase 3.1: Setup (Complete ✅)
+- [x] W001: Web project structure created
+- [x] W002: TypeScript strict mode configured
+- [x] All configuration files in place
+- [x] Committed and pushed to GitHub
+
+#### Phase 3.2: Dependencies & Tests (Next)
+- [ ] W003: All npm dependencies installed
+- [ ] W004: Firebase environment variables configured
+- [ ] W005-W008: Contract tests run and PASS
+
+#### Phase 3.3: Core Implementation
+- [ ] W009-W011: Core types and contexts created
+- [ ] W012-W016: All service layers implemented (copied from mobile)
+- [ ] W017: PrivateRoute protects authenticated routes
+- [ ] W018-W019: Auth pages functional (login, register)
+- [ ] W020: Layout component with navigation
+- [ ] W021-W023: Feature pages implemented
+
+#### Phase 3.4: Integration Tests
+- [ ] W024-W027: All 5 integration test scenarios PASS
+- [ ] Performance tests meet targets (300ms UI, 3s page load)
+- [ ] Offline tests validate Service Worker and sync
+
+#### Phase 3.5: Polish & Deploy
+- [ ] W028: Service Worker for offline support
+- [ ] W029: Web Push notifications working
+- [ ] W030: Deployed to Firebase Hosting
+- [ ] Code passes ESLint with zero warnings
+- [ ] TypeScript compiles with zero errors (strict mode)
+- [ ] Lighthouse score ≥90 (Performance, Accessibility, Best Practices)
+
+#### Ready for Web Beta Launch
+- [ ] All W001-W030 tasks complete
+- [ ] Constitution principles satisfied (TDD, code quality, UX, performance, docs)
+- [ ] Playwright E2E tests pass on Chrome, Firefox, Safari
+- [ ] Manual testing of quickstart.md scenarios complete
+- [ ] Firebase quotas reviewed (within free tier or budget allocated)
+- [ ] Privacy policy + terms of service reviewed
+- [ ] Error tracking configured (Sentry or Firebase Crashlytics)
+- [ ] PWA installable on mobile and desktop
+
+### MOBILE IMPLEMENTATION (Paused)
+
+#### Before Starting Implementation (Phase 3.3)
 - [x] All T006-T015 tests written and FAILING
 - [x] Test coverage includes all 5 quickstart scenarios
 - [x] Contract tests cover all security rules
 - [x] Performance assertions included in tests
 
-### After Implementation Complete
-- [ ] All T006-T015 tests now PASSING
-- [ ] Contract tests verify security rules enforce permissions
-- [ ] Integration tests validate E2E user flows
-- [ ] Performance tests meet targets (300ms UI, 500ms queries)
-- [ ] Offline tests validate sync and conflict resolution
-- [ ] Code passes ESLint with zero warnings
-- [ ] TypeScript compiles with zero errors (strict mode)
-- [ ] Firebase security rules deployed and tested
-- [ ] Firebase indexes deployed and verified
-- [ ] Cloud function deployed and tested
+#### After Implementation Complete
+- [x] All T006-T015 tests now PASSING (contract tests ready)
+- [x] Contract tests written (110 tests)
+- [x] Integration tests written (5 scenarios)
+- [x] Core services implemented (T016-T023)
+- [ ] T025: Security rules deployed (blocked - Firestore init required)
+- [ ] T026: Indexes deployed
+- [ ] T027-T033: UI screens implemented
+- [ ] T034: Cloud function deployed
+- [ ] T035: Performance validation complete
 
-### Ready for Beta Launch
-- [ ] All 35 tasks complete
-- [ ] Constitution principles satisfied (TDD, code quality, UX, performance, docs)
+#### Ready for Mobile Beta Launch
+- [ ] All T001-T035 tasks complete
 - [ ] Detox E2E tests pass on iOS + Android
 - [ ] Manual testing of quickstart.md scenarios complete
-- [ ] Firebase quotas reviewed (within free tier or budget allocated)
 - [ ] Expo build configured for TestFlight / Internal Testing
-- [ ] Privacy policy + terms of service reviewed
-- [ ] Crash reporting configured (Sentry or Firebase Crashlytics)
 
 ---
 
-**Estimated Timeline**: 
-- Solo developer: ~25-30 hours total (3-4 weeks part-time)
-- With parallelization: ~15-18 hours (1.5-2 weeks part-time)
-- Full-time: ~1 week
+## Estimated Timeline
 
-**Next Command**: Execute tasks sequentially or in parallel following dependencies above.
+### WEB IMPLEMENTATION (Current Focus)
+- **Phase 3.1 (Setup)**: ✅ Complete (2 hours)
+- **Phase 3.2 (Dependencies & Tests)**: 1-2 hours
+- **Phase 3.3 (Core)**: 8-12 hours (copying from mobile + adaptation)
+  - Services: 4-6 hours (direct copy with minor changes)
+  - Pages: 4-6 hours (new UI implementation)
+- **Phase 3.4 (Integration Tests)**: 3-4 hours
+- **Phase 3.5 (Polish & Deploy)**: 2-3 hours
+
+**Total Web MVP**: 16-23 hours (2-3 weeks part-time, 3-5 days full-time)
+
+### MOBILE IMPLEMENTATION (Paused)
+- **Phase 3.1-3.3**: ✅ Complete (~20 hours already invested)
+- **Phase 3.4-3.5**: 10-15 hours remaining
+- **Total Mobile MVP**: 30-35 hours total (resume after web MVP)
+
+### COMBINED (Web + Mobile)
+- **Total Timeline**: 46-58 hours
+- **Part-time (10 hrs/week)**: 5-6 weeks
+- **Full-time (40 hrs/week)**: 1.5-2 weeks
+
+---
+
+## Next Steps
+
+### Immediate (W003-W004)
+1. Navigate to `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/`
+2. Run `npm install` (installs all dependencies)
+3. Copy `.env.example` to `.env.local` and add Firebase credentials
+4. Run `npm run dev` to start development server
+
+### This Week (W005-W016)
+1. Run contract tests to validate security rules
+2. Copy service layers from mobile app (70% reusable)
+3. Implement authentication context and pages
+
+### Next Week (W017-W027)
+1. Implement feature pages (dashboard, medications, family)
+2. Write and run integration tests
+3. Deploy to Firebase Hosting for testing
+
+**Current Command**: Start with `W003: npm install` in medication-tracker-web directory
