@@ -1,412 +1,661 @@
-# Quickstart Guide: User Story Validation
+# Quickstart Integration Test Scenarios
+
+**Date**: 2025-10-09  
+**Feature**: Medication Family Tracker MVP (Web-First)  
+**Purpose**: Validate end-to-end user flows through integration tests  
+**Platform**: Web (Browser-based tests)
+
+---
 
 ## Overview
-This document maps the 5 acceptance scenarios from the specification to concrete user flows for validation testing. Each scenario represents a critical user journey that must work end-to-end for MVP success.
+
+This document defines 5 core integration test scenarios that validate the Medication Family Tracker application from a user's perspective. Each scenario represents a complete user journey and should be implemented as an integration test.
+
+**Test Framework**: Vitest + React Testing Library + Firebase Emulator  
+**Test Location**: `tests/integration/`  
+**Execution**: Run with Firebase Emulator (`firebase emulators:start`)
 
 ---
 
-## Scenario 1: Single-Profile Setup & Daily Adherence
+## Scenario 1: Single Profile Setup (New User Onboarding)
 
-**User Story**: *"As a retired teacher taking heart medication, I want to track my daily pills so I never miss a dose."*
+**User Story**: As a new user, I want to register, create my patient profile, add my first medication with a schedule, and receive reminders so I can track my medication adherence.
 
-### Setup Phase
-1. **User Registration**
-   - Open app → "Get Started"
-   - Sign up with email/password (Firebase Auth)
-   - Set language preference: English or Tiếng Việt
-   - Verify email (optional for MVP, skip for demo)
+### Test Steps
 
-2. **Profile Creation** (FHIRPatient)
-   - Tap "Create Profile" → "For Myself"
-   - Enter name: "John Nguyen"
-   - Set birthDate: "1955-03-15"
-   - Upload photo (optional)
-   - Save → Creates `/patients/{patientId}` document
+1. **Registration**
+   - Navigate to `/register` page
+   - Enter email: `john@example.com`, password: `SecurePass123!`
+   - Click "Register" button
+   - Assert: Redirected to `/dashboard`
+   - Assert: Firebase Auth user created
 
-3. **Add First Medication** (FHIRMedicationRequest)
-   - Tap "Add Medication" button
-   - Enter medication name: "Aspirin"
-   - Set dosageInstruction:
-     - Dosage amount: "100mg"
-     - Form: "Pill"
+2. **Create Patient Profile**
+   - Click "Add Profile" button on dashboard
+   - Fill form:
+     - Name: "John Doe"
+     - Date of Birth: "1990-01-01"
+     - Role: "Self"
+     - Upload photo (mock file input)
+   - Click "Save Profile" button
+   - Assert: Patient document created in Firestore `/patients/{id}`
+   - Assert: Profile card appears on dashboard with name "John Doe"
+
+3. **Add Scheduled Medication**
+   - Click "Add Medication" button
+   - Fill form:
+     - Medication Name: "Aspirin"
+     - Dosage: "100mg"
+     - Form: "Tablet"
      - Route: "Oral"
-     - Timing: "Daily at 8:00 AM"
-     - Frequency: 1 time per day
-     - Duration: Ongoing (no end date)
-   - Upload medication photo (optional)
-   - Save → Creates `/medication_requests/{id}` document
-   - System auto-creates `/reminder_schedules/{id}` with 30-day instances
+     - Frequency: "Twice daily"
+     - Intake Times: ["08:00", "20:00"]
+     - Start Date: "2025-10-09"
+     - Instructions: "Take with food"
+   - Upload medication photo (mock file)
+   - Click "Save Medication" button
+   - Assert: MedicationRequest document created in Firestore
+   - Assert: Medication card appears with "Aspirin 100mg, Twice daily"
 
-### Daily Use Phase
-4. **Receive Notification**
-   - System triggers Expo local notification at 8:00 AM
-   - Notification shows: "Time to take Aspirin - 100mg tablet"
-   - Sound + vibration enabled by default
+4. **Verify Reminder Schedule**
+   - Assert: ReminderSchedule document created in Firestore
+   - Assert: Next reminder time displayed: "Next dose at 8:00 AM"
+   - Mock: Advance system time to 08:00
+   - Assert: Browser notification permission requested (mock granted)
+   - Assert: Browser notification displayed: "Time to take Aspirin 100mg"
 
-5. **Log Medication Taken** (FHIRMedicationAdministration)
-   - Open notification → App opens to medication detail
-   - Tap "I Took It" button
-   - System creates `/medication_administrations/{id}`:
-     - status: "completed"
-     - effectiveDateTime: current timestamp
-     - scheduledTime: 8:00 AM today
-     - performer: John's userId, role "patient"
-   - UI shows green checkmark + "Taken at 8:03 AM"
+5. **Log Medication Intake**
+   - Click "Mark as Taken" button on notification
+   - Assert: MedicationAdministration document created
+   - Assert: Status: "completed", administrationStatus: "taken"
+   - Assert: Medication card updates: "Last taken: Today at 8:00 AM"
+   - Assert: Adherence calendar shows green checkmark for today
 
-6. **View Adherence History**
-   - Navigate to "History" tab
-   - See calendar view with:
-     - Green dots: Days with 100% adherence
-     - Red dots: Days with missed doses
-   - Tap specific date → See all medications for that day
-   - See adherence rate: "28/30 days (93%)"
+### Expected Data State (Firestore)
 
-### Validation Checkpoints
-- ✅ User can create profile and add medication in < 2 minutes
-- ✅ Notification delivers within 5 minutes of scheduled time
-- ✅ Log confirmation completes in < 300ms (p95)
-- ✅ History query loads < 100 medication administrations in < 500ms
-- ✅ Offline: Can log medication without internet, syncs when reconnected
+```json
+{
+  "patients/patient123": {
+    "resourceType": "Patient",
+    "userId": "user123",
+    "active": true,
+    "name": "John Doe",
+    "birthDate": "1990-01-01",
+    "role": "self"
+  },
+  "medication_requests/med123": {
+    "resourceType": "MedicationRequest",
+    "userId": "user123",
+    "patientId": "patient123",
+    "status": "active",
+    "medicationName": "Aspirin",
+    "dosageAmount": "100mg",
+    "frequency": 2,
+    "intakeTimes": ["08:00", "20:00"]
+  },
+  "medication_administrations/admin123": {
+    "resourceType": "MedicationAdministration",
+    "userId": "user123",
+    "patientId": "patient123",
+    "medicationRequestId": "med123",
+    "status": "completed",
+    "administrationStatus": "taken",
+    "actualTime": "2025-10-09T08:00:00Z"
+  }
+}
+```
 
----
+### Assertions
 
-## Scenario 2: Multi-Profile Management (Parent Tracking Children)
-
-**User Story**: *"As a mother of two children with ADHD medication, I want to manage both their schedules separately so I don't confuse their doses."*
-
-### Setup Phase
-1. **Create Child Profiles** (FHIRPatient)
-   - After own profile exists, tap "Add Profile"
-   - Select "For Someone Else" → "Child"
-   - **Child 1**: 
-     - Name: "Emily", birthDate: "2015-06-10"
-     - Relationship: "Daughter"
-   - **Child 2**: 
-     - Name: "Ryan", birthDate: "2018-09-22"
-     - Relationship: "Son"
-   - Creates 2 additional `/patients/{id}` documents with parent's userId
-
-2. **Add Medications Per Child**
-   - **Emily's Medication**:
-     - Switch to Emily's profile (profile picker at top)
-     - Add "Adderall 10mg" - Daily at 7:00 AM (school days only)
-     - dosageInstruction.timing.repeat.dayOfWeek: ["mon", "tue", "wed", "thu", "fri"]
-   - **Ryan's Medication**:
-     - Switch to Ryan's profile
-     - Add "Ritalin 5mg" - Twice daily at 7:00 AM and 2:00 PM
-     - dosageInstruction.timing.repeat.frequency: 2, period: 1, periodUnit: "d"
-
-### Daily Use Phase
-3. **Profile Switching**
-   - Home screen shows profile cards:
-     - "You (John)" - 1 medication due today
-     - "Emily" - 1 medication due today
-     - "Ryan" - 2 medications due today
-   - Tap profile card → See medications for that profile only
-
-4. **Context-Aware Notifications**
-   - 7:00 AM: Two notifications fire:
-     - "Time for Emily to take Adderall - 10mg tablet"
-     - "Time for Ryan to take Ritalin - 5mg tablet"
-   - Each notification deep-links to correct profile
-
-5. **Log for Multiple Profiles**
-   - Log Emily's dose → status: "completed"
-   - 10 minutes later, log Ryan's dose → status: "completed"
-   - 2:00 PM: Log Ryan's second dose
-   - Each creates separate `/medication_administrations/{id}` with correct patientId
-
-6. **Separate History Views**
-   - Emily's History: Shows only her Adderall logs (weekdays only)
-   - Ryan's History: Shows both AM/PM Ritalin doses
-   - Combined View (parent dashboard): Aggregated adherence for both children
-
-### Validation Checkpoints
-- ✅ Can manage 3+ profiles without confusion (clear visual separation)
-- ✅ Notifications correctly tagged with profile name
-- ✅ Logging to wrong profile prevented (confirmation dialog)
-- ✅ Profile-scoped queries perform < 300ms even with 1000+ logs
-- ✅ No data leakage between profiles (security rules enforce isolation)
+- ✅ User registered and authenticated
+- ✅ Patient profile created and visible
+- ✅ Medication request created with correct schedule
+- ✅ Reminder schedule computed correctly
+- ✅ Browser notification displayed at scheduled time
+- ✅ Medication log created when marked as taken
+- ✅ UI updates reflect current state
 
 ---
 
-## Scenario 3: PRN (As-Needed) Medication
+## Scenario 2: Multi-Profile Family Management (Parent with Children)
 
-**User Story**: *"As someone with occasional migraines, I want to track when I take pain medication as needed, not on a fixed schedule."*
+**User Story**: As a parent, I want to create profiles for my 2 children, add different medications for each child, switch between profiles, and view a unified adherence dashboard so I can manage my family's medications.
 
-### Setup Phase
-1. **Add PRN Medication** (FHIRMedicationRequest)
-   - Navigate to profile → "Add Medication"
-   - Enter name: "Ibuprofen"
-   - Dosage: "400mg tablet"
-   - **Toggle "PRN (As Needed)" = ON**
-   - asNeededCodeableConcept: "For migraine headache"
-   - maxDosePerPeriod: 3 doses per 24 hours
-   - Instructions: "Take when headache starts, max 3 per day"
-   - Save → Creates MedicationRequest with asNeeded: true
-   - **No reminder schedule created** (PRN = on-demand only)
+### Test Steps
 
-### Daily Use Phase
-2. **Log PRN Dose (Proactive)**
-   - User feels migraine starting at 2:30 PM
-   - Open app → Navigate to "Ibuprofen" medication card
-   - Tap "I Took It" button (always visible for PRN)
-   - System creates `/medication_administrations/{id}`:
-     - status: "completed"
-     - effectiveDateTime: 2:30 PM
-     - scheduledTime: null (PRN has no schedule)
-     - statusReason: null (optional)
-   - UI shows: "Last taken: 2:30 PM today (1 of 3 doses today)"
+1. **Create First Child Profile**
+   - Login as existing user (from Scenario 1)
+   - Navigate to `/dashboard`
+   - Click "Add Profile" button
+   - Fill form:
+     - Name: "Emma Doe"
+     - Date of Birth: "2015-03-15"
+     - Role: "Family Member"
+   - Click "Save Profile"
+   - Assert: Patient document created for Emma
 
-3. **Maximum Dose Warning**
-   - User tries to log 4th dose at 8:00 PM
-   - System queries: `medication_administrations` where medicationRequestId = ibuprofen AND effectiveDateTime >= today 00:00
-   - Counts 3 doses already
-   - Shows warning dialog: "Daily limit reached (3/3 doses). Consult doctor before taking more."
-   - User can still log with "Override" confirmation
+2. **Add Medication for First Child**
+   - Select "Emma Doe" from profile dropdown
+   - Click "Add Medication"
+   - Fill form:
+     - Medication: "Amoxicillin"
+     - Dosage: "250mg"
+     - Frequency: "3 times daily"
+     - Intake Times: ["08:00", "14:00", "20:00"]
+     - Duration: "7 days"
+     - Start Date: "2025-10-09"
+   - Click "Save"
+   - Assert: Medication created for Emma's profile
 
-4. **PRN History View**
-   - Navigate to Ibuprofen history
-   - Shows doses on timeline (no missed/late indicators)
-   - Displays patterns: "Taken 8 times this month" with date list
-   - Export option: "Share PRN usage report with doctor (PDF)"
+3. **Create Second Child Profile**
+   - Click "Add Profile" button
+   - Fill form:
+     - Name: "Oliver Doe"
+     - Date of Birth: "2018-07-22"
+     - Role: "Family Member"
+   - Click "Save Profile"
+   - Assert: Patient document created for Oliver
 
-### Validation Checkpoints
-- ✅ PRN medications have no scheduled reminders
-- ✅ "I Took It" button always visible for PRN (vs scheduled medications hide after window)
-- ✅ Max dose validation works offline (cached query)
-- ✅ PRN history distinguishes from scheduled medications (no adherence %)
+4. **Add Medication for Second Child**
+   - Select "Oliver Doe" from profile dropdown
+   - Click "Add Medication"
+   - Fill form:
+     - Medication: "Vitamin D"
+     - Dosage: "400 IU"
+     - Frequency: "Once daily"
+     - Intake Times: ["09:00"]
+     - Duration: "Indefinite"
+   - Click "Save"
+   - Assert: Medication created for Oliver's profile
+
+5. **Switch Between Profiles**
+   - Select "Emma Doe" from dropdown
+   - Assert: Only Emma's medications displayed (Amoxicillin)
+   - Select "Oliver Doe" from dropdown
+   - Assert: Only Oliver's medications displayed (Vitamin D)
+   - Select "All Profiles" from dropdown
+   - Assert: All medications displayed (Aspirin, Amoxicillin, Vitamin D)
+
+6. **Verify Unified Dashboard**
+   - Navigate to `/dashboard`
+   - Assert: 3 profiles visible (John, Emma, Oliver)
+   - Assert: Adherence summary shows all profiles:
+     - "3 medications scheduled today"
+     - "Upcoming: Emma - Amoxicillin at 2:00 PM"
+   - Assert: Calendar view shows color-coded entries per profile
+
+7. **Receive Notifications for Multiple Children**
+   - Mock: Advance time to 08:00
+   - Assert: 2 notifications displayed:
+     - "John: Time to take Aspirin 100mg"
+     - "Emma: Time to take Amoxicillin 250mg"
+   - Click "Mark as Taken" on Emma's notification
+   - Assert: Only Emma's medication logged, John's remains pending
+
+### Expected Data State
+
+```json
+{
+  "patients": {
+    "patient123": { "name": "John Doe", "role": "self" },
+    "patient456": { "name": "Emma Doe", "role": "family_member" },
+    "patient789": { "name": "Oliver Doe", "role": "family_member" }
+  },
+  "medication_requests": {
+    "med123": { "patientId": "patient123", "medicationName": "Aspirin" },
+    "med456": { "patientId": "patient456", "medicationName": "Amoxicillin" },
+    "med789": { "patientId": "patient789", "medicationName": "Vitamin D" }
+  }
+}
+```
+
+### Assertions
+
+- ✅ Multiple patient profiles created under one user
+- ✅ Each profile has independent medication list
+- ✅ Profile switching works correctly
+- ✅ Unified dashboard shows aggregated data
+- ✅ Notifications separated by profile
+- ✅ Logging medication updates only relevant profile
+
+---
+
+## Scenario 3: PRN Medication (As-Needed Medication)
+
+**User Story**: As a caregiver, I want to add a PRN (as-needed) medication with detailed instructions, photos, and usage limits so my patient knows when and how to take it.
+
+### Test Steps
+
+1. **Add PRN Medication**
+   - Login and select patient profile
+   - Click "Add Medication"
+   - Toggle "PRN (As Needed)" switch
+   - Fill form:
+     - Medication: "Tylenol"
+     - Dosage: "500mg"
+     - Form: "Tablet"
+     - PRN Condition: "When headache occurs"
+     - How Much: "1-2 tablets"
+     - Max Dose Per Day: "6 tablets"
+     - Visual Description: "White round pill with 'TYLENOL 500' imprint"
+   - Upload medication photo
+   - Click "Save"
+   - Assert: MedicationRequest created with `isPRN: true`
+   - Assert: No reminder schedule created
+
+2. **View PRN Medication List**
+   - Navigate to "PRN Medications" tab
+   - Assert: Tylenol displayed with:
+     - Condition: "When headache occurs"
+     - Instructions: "1-2 tablets"
+     - Max: "6 tablets per day"
+     - Photo visible
+   - Assert: No scheduled time shown
+
+3. **Log PRN Intake (First Time)**
+   - Click "Log Intake" button on Tylenol card
+   - Select dose: "1 tablet"
+   - Add note: "Mild headache after lunch"
+   - Click "Save Log"
+   - Assert: MedicationAdministration created:
+     - `status: "completed"`
+     - `actualTime: <current timestamp>`
+     - `doseText: "1 tablet"`
+     - `notes: "Mild headache after lunch"`
+   - Assert: Tylenol card updates: "Last taken: Today at 1:30 PM (1 tablet)"
+
+4. **Track Daily Usage**
+   - Log intake again 2 hours later: "2 tablets"
+   - Assert: Usage counter updates: "Taken 2 times today (3 tablets total)"
+   - Assert: Warning displayed: "3 of 6 tablets used today"
+
+5. **Enforce Max Dose Limit**
+   - Attempt to log 4 more tablets (would exceed 6)
+   - Assert: Warning modal: "This would exceed the daily maximum of 6 tablets"
+   - Assert: "Log Anyway" button (allows override with confirmation)
+   - Assert: "Cancel" button (prevents logging)
+   - Click "Cancel"
+   - Assert: Intake not logged
+
+### Expected Data State
+
+```json
+{
+  "medication_requests/med_prn_123": {
+    "resourceType": "MedicationRequest",
+    "userId": "user123",
+    "patientId": "patient123",
+    "status": "active",
+    "medicationName": "Tylenol",
+    "dosageAmount": "500mg",
+    "isPRN": true,
+    "prnCondition": "When headache occurs",
+    "maxDosePerDay": "6 tablets",
+    "visualDescription": "White round pill with 'TYLENOL 500' imprint",
+    "photoUrl": "https://storage.googleapis.com/..."
+  },
+  "medication_administrations": [
+    {
+      "medicationRequestId": "med_prn_123",
+      "actualTime": "2025-10-09T13:30:00Z",
+      "doseText": "1 tablet",
+      "notes": "Mild headache after lunch"
+    },
+    {
+      "medicationRequestId": "med_prn_123",
+      "actualTime": "2025-10-09T15:30:00Z",
+      "doseText": "2 tablets",
+      "notes": ""
+    }
+  ]
+}
+```
+
+### Assertions
+
+- ✅ PRN medication created without schedule
+- ✅ Detailed instructions and photos stored
+- ✅ Manual logging works correctly
+- ✅ Daily usage tracked accurately
+- ✅ Max dose warning displayed
+- ✅ Override mechanism available with confirmation
 - ✅ Can log PRN dose in < 10 seconds from app open
 
 ---
 
-## Scenario 4: Caregiver Monitoring & Remote Logging
 
-**User Story**: *"As a daughter caring for my elderly father, I want to see if he took his medications and log doses when I visit him."*
-
-### Setup Phase
-1. **Patient Sends Invitation** (FHIRRelatedPerson)
-   - Father (John) opens app → "Settings" → "Caregivers"
-   - Tap "Invite Caregiver"
-   - Enter daughter's email: "emily@example.com"
-   - Set permissions:
-     - ☑ "Can view medication history"
-     - ☑ "Can log doses on my behalf"
-     - ☑ "Receive miss alerts"
-   - Add relationship: "Daughter"
-   - Send invitation → Creates `/family_connections/{id}`:
-     - status: "pending"
-     - permissionLevel: "can_log"
-     - canReceiveNotifications: true
-
-2. **Caregiver Accepts Invitation**
-   - Emily receives email notification
-   - Opens app (creates account if new user)
-   - Sees invitation: "John Nguyen wants you to monitor their medications"
-   - Tap "Accept" → Updates connection status: "accepted"
-   - Creates `/related_persons/{id}` and optionally `/care_teams/{id}`
-
-### Daily Use Phase
-3. **Caregiver Views Patient Status**
-   - Emily opens app → Sees two profile sections:
-     - "My Medications" (her own)
-     - "Caring For: John Nguyen" (caregiver access)
-   - Taps John's profile → Sees his medication list:
-     - Aspirin 100mg - Due at 8:00 AM (green checkmark = taken at 8:03 AM)
-     - Lisinopril 10mg - Due at 8:00 PM (gray = not yet due)
-
-4. **Caregiver Logs Dose Remotely**
-   - Emily visits father at 6:00 PM
-   - Father forgot to log morning dose (took it but didn't confirm in app)
-   - Emily opens app → John's profile → Aspirin
-   - Sees "Taken at 8:00 AM?" prompt (scheduled time passed)
-   - Taps "Confirm Taken" → "Who took it?"
-     - Option 1: "John took it himself" (logged_by: John, role: patient)
-     - Option 2: "I gave it to John" (logged_by: Emily, role: caregiver)
-   - Selects Option 1 → Creates `/medication_administrations/{id}`:
-     - status: "completed"
-     - effectiveDateTime: 8:00 AM today
-     - performerUserId: John's ID
-     - performerRole: "patient"
-     - loggedByUserId: Emily's ID (extension: logged-by-caregiver)
-
-5. **Caregiver Receives Miss Alert**
-   - Next day, 8:30 AM: John misses Aspirin dose
-   - System triggers Cloud Function at 8:30 AM (30-min grace period)
-   - Queries `/medication_administrations` for today's Aspirin dose → Not found
-   - Finds active FamilyConnection where canReceiveNotifications: true
-   - Sends Firebase Cloud Messaging push to Emily:
-     - "John Nguyen missed Aspirin 100mg at 8:00 AM"
-   - Emily opens notification → Can call John or log dose remotely
-
-6. **Permission Management**
-   - Father revokes logging permission:
-     - Settings → Caregivers → Emily → Toggle off "Can log doses"
-     - Updates FamilyConnection: permissionLevel = "view_only"
-   - Emily can still view history but "Log Dose" buttons now disabled
-   - Security rules enforce: `caregiverCanLog()` check fails
-
-### Validation Checkpoints
-- ✅ Invitation flow completes in < 1 minute
-- ✅ Caregiver sees patient data within 5 seconds of acceptance
-- ✅ Remote logging clearly indicates who performed action (audit trail)
-- ✅ Miss alerts deliver to caregiver within 5 minutes of grace period
-- ✅ Permission changes propagate to caregiver app within 30 seconds (Firebase sync)
-- ✅ Security rules prevent unauthorized logging (view_only caregivers blocked)
 
 ---
 
-## Scenario 5: Offline-First & Conflict Resolution
+## Scenario 4: Caregiver Monitoring (Invitation & Remote Access)
 
-**User Story**: *"As a user in rural Vietnam with spotty internet, I want to log medications offline and have them sync when I get back online."*
+**User Story**: As a patient, I want to invite a caregiver to monitor my medications, and as a caregiver, I want to view patient medications, receive alerts when they miss a dose, and log medications on their behalf.
 
-### Setup Phase
-1. **Enable Offline Persistence**
-   - App initializes with Firestore offline persistence enabled:
-     ```typescript
-     await enableIndexedDbPersistence(firestore);
-     ```
-   - Caches last 7 days of medication data locally
+### Test Steps
 
-### Offline Use Phase
+1. **Send Caregiver Invitation (Patient Side)**
+   - Login as patient (John Doe)
+   - Navigate to `/family` page
+   - Click "Invite Caregiver" button
+   - Enter caregiver email: `caregiver@example.com`
+   - Select patient profile: "John Doe"
+   - Set permissions: "Can view and log medications"
+   - Click "Send Invitation"
+   - Assert: FamilyConnection document created:
+     - `status: "pending"`
+     - Email sent to caregiver (mock email service)
+   - Assert: Invitation appears in "Pending Invitations" section
+
+2. **Accept Invitation (Caregiver Side)**
+   - Logout patient
+   - Register new user (caregiver): `caregiver@example.com`
+   - Click invitation link in email (mock)
+   - Assert: Redirected to `/family/invitation/{connectionId}`
+   - Assert: Invitation details displayed:
+     - "John Doe invites you to be their caregiver"
+     - "You will be able to: View medications, Log medications"
+   - Click "Accept Invitation" button
+   - Assert: FamilyConnection updated: `status: "accepted"`
+   - Assert: Redirected to caregiver dashboard
+
+3. **View Patient Medications (Caregiver Dashboard)**
+   - Assert: Caregiver dashboard shows:
+     - Section: "Patients You Care For"
+     - Card: "John Doe" with status "Active"
+   - Click on "John Doe" card
+   - Assert: Redirected to `/patients/patient123`
+   - Assert: Patient's medications displayed (Aspirin 100mg)
+   - Assert: "Add Medication" button disabled (read-only except logging)
+
+4. **Receive Missed Dose Alert (Caregiver)**
+   - Mock: Patient misses 8:00 AM Aspirin dose
+   - Mock: 15 minutes pass (grace period)
+   - Mock: Cloud Function triggers (checkMissedDoses)
+   - Assert: FCM notification sent to caregiver device token
+   - Assert: Browser notification displayed:
+     - "John Doe missed their 8:00 AM Aspirin dose"
+     - Action buttons: "View", "Dismiss"
+   - Click "View" button
+   - Assert: Redirected to patient medication page
+
+5. **Log Medication on Behalf of Patient**
+   - On patient medication page (as caregiver)
+   - Click "Log on Behalf" button for missed Aspirin
+   - Select status: "Taken (Late)"
+   - Add note: "Patient forgot, took at 8:30 AM"
+   - Click "Save Log"
+   - Assert: MedicationAdministration created:
+     - `performedBy: <caregiver userId>`
+     - `performedByRole: "caregiver"`
+     - `administrationStatus: "taken_late"`
+     - `notes: "Patient forgot, took at 8:30 AM"`
+   - Assert: Medication card updates: "Taken by Caregiver Jane at 8:30 AM"
+   - Assert: Patient sees updated log on their dashboard
+
+6. **Patient Revokes Caregiver Access**
+   - Login as patient (John Doe)
+   - Navigate to `/family` page
+   - Click "Manage Caregivers" tab
+   - Assert: Caregiver "Jane Smith" listed with status "Active"
+   - Click "Revoke Access" button
+   - Confirm dialog: "Are you sure?"
+   - Click "Yes, Revoke"
+   - Assert: FamilyConnection updated: `status: "revoked"`
+   - Logout patient, login as caregiver
+   - Assert: "John Doe" no longer appears in caregiver dashboard
+   - Attempt to access `/patients/patient123`
+   - Assert: Access denied (Firestore Security Rules block)
+
+### Expected Data State
+
+```json
+{
+  "family_connections/user123_caregiver456": {
+    "patientUserId": "user123",
+    "caregiverUserId": "caregiver456",
+    "patientId": "patient123",
+    "status": "accepted", // then "revoked"
+    "permissions": ["can_view", "can_log"],
+    "invitedAt": "2025-10-09T10:00:00Z",
+    "acceptedAt": "2025-10-09T10:15:00Z",
+    "revokedAt": "2025-10-09T12:00:00Z"
+  },
+  "medication_administrations/admin_caregiver_123": {
+    "resourceType": "MedicationAdministration",
+    "userId": "user123", // Patient's userId
+    "patientId": "patient123",
+    "medicationRequestId": "med123",
+    "performedBy": "caregiver456",
+    "performedByRole": "caregiver",
+    "performedByName": "Jane Smith",
+    "administrationStatus": "taken_late",
+    "actualTime": "2025-10-09T08:30:00Z",
+    "scheduledTime": "2025-10-09T08:00:00Z",
+    "notes": "Patient forgot, took at 8:30 AM"
+  }
+}
+```
+
+### Assertions
+
+- ✅ Caregiver invitation sent and email triggered
+- ✅ Caregiver can accept/reject invitation
+- ✅ Accepted caregiver can view patient medications
+- ✅ Caregiver receives browser notification for missed doses
+- ✅ Caregiver can log medications on behalf of patient
+- ✅ Log correctly attributes action to caregiver
+- ✅ Patient can revoke caregiver access
+- ✅ Revoked caregiver loses access immediately
+
+---
+
+## Scenario 5: Offline Usage & Sync (Progressive Web App)
+
+**User Story**: As a user with unreliable internet, I want to view my medications, log intake while offline, and have my data automatically sync when I reconnect so I never lose my adherence data.
+
+### Test Steps
+
+1. **Setup: User with Existing Data**
+   - Login as existing user (from Scenario 1)
+   - Assert: 1 patient profile, 1 active medication (Aspirin)
+   - Assert: Firestore offline persistence enabled
+   - Assert: Service Worker registered
+
 2. **Go Offline**
-   - User's phone loses internet at 7:30 AM (rural area)
-   - App shows offline indicator (yellow banner: "Offline - Changes will sync later")
+   - Open browser DevTools → Network tab
+   - Select "Offline" throttling
+   - Assert: App displays offline indicator banner: "You are offline. Changes will sync when reconnected."
+   - Refresh page (F5)
+   - Assert: App loads from Service Worker cache
+   - Assert: UI fully functional (no loading spinners stuck)
 
-3. **Log Dose Offline**
-   - 8:00 AM: Expo local notification fires (no internet needed)
-   - User taps "I Took It"
-   - App creates `/medication_administrations/{id}` **locally**:
-     - Firestore writes to IndexedDB cache
-     - UI shows immediate feedback (green checkmark)
-     - Sync status icon: "Pending upload"
+3. **View Medications Offline**
+   - Navigate to `/medications` page
+   - Assert: Medications list displays from IndexedDB cache
+   - Assert: Aspirin 100mg visible with all details
+   - Assert: Medication photos loaded from Service Worker cache
+   - Click on medication card
+   - Assert: Details page loads from cache
 
-4. **Multiple Offline Logs**
-   - 8:00 PM: User logs second medication (still offline)
-   - Both logs queued in Firestore offline cache
-   - UI shows all updates instantly (optimistic updates)
+4. **Log Medication Intake Offline**
+   - Click "Mark as Taken" button on Aspirin
+   - Assert: Optimistic UI update (green checkmark appears immediately)
+   - Assert: MedicationAdministration queued in IndexedDB
+   - Assert: Sync indicator: "1 change pending sync"
+   - Navigate to adherence history
+   - Assert: New log entry visible (from local state)
 
-### Sync & Conflict Resolution Phase
-5. **Reconnect Online**
-   - 9:00 PM: Internet restored
-   - App detects connectivity → Syncs pending writes
-   - Firestore uploads 2 medication administration documents
-   - Server timestamp fields updated: `meta.lastUpdated`
-   - Sync status changes to "Synced" (green checkmark)
+5. **Attempt to Add Medication Offline**
+   - Click "Add Medication" button
+   - Fill form with new medication
+   - Click "Save"
+   - Assert: Warning modal: "You are offline. This medication will be saved when you reconnect."
+   - Click "Save Anyway"
+   - Assert: Medication queued in IndexedDB
+   - Assert: Sync indicator: "2 changes pending sync"
 
-6. **Conflict Scenario: Last-Write-Wins**
-   - **Edge Case**: User logged on phone (offline) + caregiver logged remotely (online)
-   - Timeline:
-     - 8:00 AM: John logs on phone (offline) → effectiveDateTime: 8:00 AM
-     - 8:15 AM: Emily (caregiver) remotely logs for John (online) → effectiveDateTime: 8:10 AM
-     - 9:00 PM: John's phone syncs
-   - **Conflict Detection**:
-     - Firestore receives John's write with older `meta.lastUpdated`
-     - LWW (Last-Write-Wins) strategy:
-       - Both writes succeed (creates 2 separate administrations)
-       - App logic deduplicates on read: Keeps Emily's log (newer)
-       - Query: `ORDER BY meta.lastUpdated DESC LIMIT 1`
-   - **User Notification**:
-     - John sees: "Aspirin already logged by Emily at 8:15 AM. Your entry discarded."
-     - Option to view both logs in edit history
+6. **Go Back Online**
+   - DevTools → Network tab → Select "No throttling"
+   - Assert: Service Worker detects online event
+   - Assert: Background sync triggered automatically
+   - Assert: Sync indicator updates: "Syncing 2 changes..."
+   - Wait 2 seconds
+   - Assert: Sync completes: "All changes synced ✓"
+   - Assert: Queued writes sent to Firestore
+   - Assert: Server timestamps applied
 
-7. **Data Integrity Check**
-   - After sync, app validates:
-     - All logs have `effectiveDateTime <= now()`
-     - No duplicate logs for same scheduledTime (within 1-hour window)
-     - Adherence calculations refresh with server timestamps
+7. **Verify Sync Integrity**
+   - Refresh page (F5)
+   - Assert: All data persists (medications, logs)
+   - Assert: Server timestamps replace local timestamps
+   - Login on different device (mock)
+   - Assert: Changes visible on second device (real-time sync)
 
-### Validation Checkpoints
-- ✅ Offline writes complete in < 100ms (IndexedDB fast)
-- ✅ Sync completes within 30 seconds of reconnection
-- ✅ No data loss during offline period (Firestore queue persists)
-- ✅ LWW conflicts resolve automatically (no user intervention needed)
-- ✅ Optimistic UI never "flickers" on sync (server write = no-op if no conflict)
-- ✅ Offline notification scheduling works for 30 days (local scheduling)
+8. **Handle Sync Conflicts**
+   - Setup: Log same medication on 2 devices while both offline
+   - Device A: Logs Aspirin at 08:00 (offline)
+   - Device B: Logs Aspirin at 08:01 (offline)
+   - Both devices go online
+   - Assert: Last-Write-Wins (Device B's log wins)
+   - Assert: Device A's log discarded (or merged with conflict flag)
+   - Assert: Conflict notification: "Your log was overwritten by a newer entry"
+
+### Expected Data State
+
+**Offline (IndexedDB)**:
+```json
+{
+  "_pending_writes": [
+    {
+      "collection": "medication_administrations",
+      "operation": "create",
+      "data": {
+        "medicationRequestId": "med123",
+        "actualTime": "2025-10-09T08:00:00.000Z", // Local timestamp
+        "status": "completed",
+        "administrationStatus": "taken"
+      },
+      "timestamp": 1696838400000
+    }
+  ],
+  "_cached_data": {
+    "medication_requests/med123": { /* cached medication */ }
+  }
+}
+```
+
+**Online (Firestore after sync)**:
+```json
+{
+  "medication_administrations/admin_offline_123": {
+    "resourceType": "MedicationAdministration",
+    "userId": "user123",
+    "patientId": "patient123",
+    "medicationRequestId": "med123",
+    "status": "completed",
+    "administrationStatus": "taken",
+    "actualTime": "2025-10-09T08:00:00Z",
+    "meta": {
+      "createdAt": "<server timestamp>", // Replaced with server time
+      "lastUpdated": "<server timestamp>"
+    }
+  }
+}
+```
+
+### Assertions
+
+- ✅ App loads fully offline from Service Worker cache
+- ✅ Medications and photos cached in IndexedDB
+- ✅ Logging medications works offline (optimistic UI)
+- ✅ Offline writes queued in IndexedDB
+- ✅ Sync indicator shows pending changes
+- ✅ Background sync triggers automatically when online
+- ✅ All queued writes sent to Firestore
+- ✅ Server timestamps applied on sync
+- ✅ Conflict resolution (Last-Write-Wins) works
+- ✅ No data loss during offline/online transitions
 
 ---
 
-## Technical Validation Checklist
+## Test Execution
 
-### Performance (From Constitution)
-- [ ] UI response time p95 < 300ms for all logged actions
-- [ ] Notification delivery < 5 minutes after scheduled time
-- [ ] History queries (100 logs) complete < 500ms
-- [ ] Sync latency < 30 seconds after reconnection
-- [ ] App launch time < 2 seconds (cold start with cache)
+### Running Integration Tests
 
-### Reliability
-- [ ] Crash rate < 1% across all scenarios
-- [ ] Offline mode works for 7+ days without internet
-- [ ] 100% notification delivery rate (local scheduling)
-- [ ] Data integrity: No duplicate logs, no lost writes
-
-### Security
-- [ ] Firebase Auth required for all operations
-- [ ] Security rules block unauthorized profile access
-- [ ] Caregivers cannot exceed granted permissions
-- [ ] 24-hour edit window enforced server-side
-
-### Internationalization
-- [ ] All UI text supports English + Vietnamese
-- [ ] Date/time formats respect locale (US vs VN)
-- [ ] Medication names support Unicode (Vietnamese diacritics)
-
-### Accessibility (Future)
-- [ ] Screen reader support (VoiceOver/TalkBack)
-- [ ] Minimum touch target size: 44x44pt
-- [ ] Color contrast ratios meet WCAG AA
-
----
-
-## Running Validation Tests
-
-### Unit Tests (Jest)
 ```bash
-npm test -- --testPathPattern=scenarios
+# Start Firebase Emulator
+firebase emulators:start --only firestore,auth
+
+# Run integration tests
+npm run test:integration
+
+# Run specific scenario
+npm run test:integration -- scenario-1-single-profile
+
+# Run with coverage
+npm run test:integration -- --coverage
 ```
 
-### Integration Tests (React Native Testing Library)
-```bash
-npm test -- --testPathPattern=integration
+### Test Configuration (vitest.config.ts)
+
+```typescript
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./tests/setup.ts'],
+    include: ['tests/integration/**/*.test.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      exclude: ['node_modules/', 'tests/'],
+    },
+  },
+});
 ```
 
-### End-to-End Tests (Detox)
-```bash
-# Scenario 1: Single-profile setup
-detox test e2e/scenario-1-single-profile.e2e.ts
+### Mock Services
 
-# Scenario 2: Multi-profile management
-detox test e2e/scenario-2-multi-profile.e2e.ts
+```typescript
+// tests/mocks/firebaseEmulator.ts
+export const connectToEmulator = () => {
+  connectFirestoreEmulator(firestore, 'localhost', 8080);
+  connectAuthEmulator(auth, 'http://localhost:9099');
+};
 
-# Scenario 3: PRN medication
-detox test e2e/scenario-3-prn-medication.e2e.ts
-
-# Scenario 4: Caregiver monitoring
-detox test e2e/scenario-4-caregiver.e2e.ts
-
-# Scenario 5: Offline-first
-detox test e2e/scenario-5-offline.e2e.ts
-```
-
-### Firebase Emulator Tests
-```bash
-# Start emulators
-firebase emulators:start
-
-# Run security rules tests
-npm run test:rules
+// tests/mocks/notificationService.ts
+export const mockNotificationPermission = () => {
+  Object.defineProperty(window.Notification, 'permission', {
+    writable: true,
+    value: 'granted',
+  });
+};
 ```
 
 ---
 
-## Success Criteria (MVP)
+## Success Criteria
 
-From spec.md acceptance criteria:
-- ✅ **≥50 beta users** successfully complete Scenario 1 (single-profile setup)
-- ✅ **≥80% adherence logging rate** across all users (daily active logging)
-- ✅ **≥8/10 satisfaction score** from beta user surveys
-- ✅ **<1% crash rate** measured via Firebase Crashlytics
-- ✅ **≥90% feature coverage** from automated E2E tests
+All 5 scenarios must pass with:
+- ✅ **100% Firestore operations succeed** (create, read, update, delete)
+- ✅ **All UI interactions work** (form submissions, navigation, button clicks)
+- ✅ **Security rules enforced** (unauthorized access denied)
+- ✅ **Real-time sync validated** (changes appear across sessions)
+- ✅ **Offline functionality confirmed** (Service Worker, IndexedDB)
+- ✅ **No console errors** (React warnings, Firestore errors)
 
-When all 5 scenarios pass validation + success criteria met → **MVP READY FOR BETA LAUNCH** 🚀
+---
+
+## Status
+
+✅ **Quickstart complete** (5 scenarios defined)  
+✅ **Integration test specifications ready**  
+⏳ **Next**: Implement tests in `tests/integration/*.test.ts`  
+⏳ **Next**: Setup Firebase Emulator Suite  
+⏳ **Next**: Configure Vitest for integration testing  
+
+**Version**: 1.0 (Web-First)  
+**Last Updated**: 2025-10-09  
+**Platform**: Web (Browser-based tests with Firebase Emulator)

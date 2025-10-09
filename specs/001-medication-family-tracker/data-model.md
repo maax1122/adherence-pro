@@ -1,8 +1,9 @@
 # Data Model: Medication Family Tracker (FHIR-Compliant)
 
-**Date**: 2025-10-06
-**Feature**: Medication Family Tracker MVP
+**Date**: 2025-10-09
+**Feature**: Medication Family Tracker MVP (Web-First)
 **FHIR Version**: R4 (4.0.1)
+**Platform**: Web (Phase 1), Mobile (Phase 2)
 
 ## Design Philosophy
 
@@ -11,25 +12,45 @@ This data model follows **FHIR (Fast Healthcare Interoperability Resources) R4**
 - **Future-proof**: Easy integration with telehealth, pharmacy APIs, and health records
 - **Standardization**: Industry-standard terminology (SNOMED CT, LOINC, RxNorm)
 - **Extensibility**: FHIR's extension mechanism for custom fields
+- **Platform Agnostic**: 100% reusable for web (Phase 1) and mobile (Phase 2)
 
 **FHIR Resource Mapping**:
-- Profile → `Patient` resource
+- Patient Profile → `Patient` resource
 - Medication → `MedicationRequest` + `Medication` resources
 - MedicationLog → `MedicationAdministration` resource
 - FamilyConnection → `RelatedPerson` + `CareTeam` resources
 - ReminderSchedule → Custom extension on `MedicationRequest`
 
+**Collection Structure** (Flat, FHIR-Standard):
+- Top-level collections for all FHIR resources (not nested under users)
+- Security enforced via Firestore Security Rules checking `userId` field
+- Enables cross-user queries (caregiver access) and FHIR export
+
 ## Entity Relationship Overview
 
 ```
-User (Firebase Auth)
-  └─has many→ Patient (FHIR Patient)
-                ├─has many→ MedicationRequest (FHIR MedicationRequest)
-                │            └─references→ Medication (FHIR Medication)
-                │            └─has many→ MedicationAdministration (FHIR)
-                ├─has many→ ReminderSchedule (Custom Extension)
-                └─related via→ RelatedPerson & CareTeam (FHIR)
+User (Firebase Auth uid)
+  └─creates→ Patient (FHIR Patient) [userId field]
+              ├─has many→ MedicationRequest (FHIR MedicationRequest) [subject.reference]
+              │            └─has many→ MedicationAdministration (FHIR) [medicationReference]
+              ├─has many→ ReminderSchedule (Custom Extension) [medicationRequestReference]
+              └─related via→ FamilyConnection (RelatedPerson + CareTeam) [patientId, caregiverId]
 ```
+
+**Firestore Collections** (Flat Structure):
+```
+/patients/{patientId}                                    # FHIR Patient resources
+/medication_requests/{medicationRequestId}               # FHIR MedicationRequest resources
+/medication_administrations/{administrationId}           # FHIR MedicationAdministration resources
+/family_connections/{connectionId}                       # RelatedPerson + CareTeam (hybrid)
+/care_teams/{careTeamId}                                # FHIR CareTeam resources (optional)
+/reminder_schedules/{scheduleId}                        # Custom FHIR extension
+```
+
+**Cross-References** (FHIR Standard):
+- All resources reference each other via `{resourceType}/{id}` pattern
+- Example: MedicationRequest.subject.reference = `"Patient/abc123"`
+- Security: Each document contains `userId` field for Firestore Security Rules
 
 **FHIR References**:
 - FHIR R4 Spec: https://hl7.org/fhir/R4/
@@ -73,7 +94,7 @@ interface FirebaseUser {
 
 **FHIR Resource**: `Patient` (https://hl7.org/fhir/R4/patient.html)
 
-**Firestore Path**: `/users/{userId}/patients/{patientId}`
+**Firestore Path**: `/patients/{patientId}` (flat collection, top-level)
 
 **TypeScript Interface** (FHIR-compliant):
 ```typescript
@@ -162,12 +183,19 @@ interface PatientDocument {
 
 **Security Rules**:
 ```javascript
-match /users/{userId}/patients/{patientId} {
-  allow read, write: if request.auth.uid == userId;
-  // Validate FHIR resourceType
-  allow write: if request.resource.data.resourceType == 'Patient';
+match /patients/{patientId} {
+  // Allow read/write only if user owns this patient (via userId field)
+  allow read, write: if request.auth.uid == resource.data.userId;
+  // On create, ensure userId matches authenticated user
+  allow create: if request.auth.uid == request.resource.data.userId
+                && request.resource.data.resourceType == 'Patient';
 }
 ```
+
+**Web-Specific Notes**:
+- **Photo Upload**: Use File API (`<input type="file">`) → Firebase Storage → store URL in `photoUrl`
+- **Offline Access**: Patient documents cached in IndexedDB via Firestore offline persistence
+- **Real-time Sync**: Use Firestore `onSnapshot()` for live updates (same API as mobile)
 
 ---
 
@@ -176,7 +204,7 @@ match /users/{userId}/patients/{patientId} {
 
 **FHIR Resource**: `MedicationRequest` (https://hl7.org/fhir/R4/medicationrequest.html)
 
-**Firestore Path**: `/users/{userId}/patients/{patientId}/medication_requests/{requestId}`
+**Firestore Path**: `/medication_requests/{requestId}` (flat collection, top-level)
 
 **TypeScript Interface** (FHIR-compliant):
 ```typescript
@@ -383,24 +411,40 @@ interface MedicationRequestDocument {
 ```
 
 **Indexes**:
-- Composite: `(profileId, isActive, startDate)` for active meds query
-- `userId` (for cross-profile medication queries)
-- `isPRN` (to separate PRN from scheduled)
+- Composite: `(userId, status, authoredOn)` for user's active medications
+- Composite: `(subject.reference, status, authoredOn)` for patient's medications
+- Single: `userId` (for cross-patient queries, caregiver access)
+- Single: `isPRN` (to separate PRN from scheduled medications)
 
 **Validation Rules**:
-- `name`: 1-100 characters
+- `medicationName`: 1-100 characters
 - `dosageAmount`: 1-50 characters
 - `intakeTimes`: Array of valid HH:mm strings (00:00 to 23:59)
-- `frequency.value`: 1-10 for scheduled meds
+- `frequency`: 1-10 for scheduled meds, null for PRN
 - `startDate <= endDate` if both provided
 
 **Security Rules**:
 ```javascript
-match /users/{userId}/profiles/{profileId}/medications/{medicationId} {
-  allow read: if request.auth.uid == userId || isCaregiver(request.auth.uid, profileId);
-  allow write: if request.auth.uid == userId || isCaregiver(request.auth.uid, profileId);
+match /medication_requests/{medicationRequestId} {
+  // Allow read if user owns the patient OR is an approved caregiver
+  allow read: if request.auth.uid == resource.data.userId 
+              || isApprovedCaregiver(request.auth.uid, resource.data.patientId);
+  // Allow write only if user owns the patient
+  allow create: if request.auth.uid == request.resource.data.userId
+                && request.resource.data.resourceType == 'MedicationRequest';
+  allow update, delete: if request.auth.uid == resource.data.userId;
+}
+
+function isApprovedCaregiver(caregiverUid, patientId) {
+  return exists(/databases/$(database)/documents/family_connections/$(caregiverUid + '_' + patientId))
+         && get(/databases/$(database)/documents/family_connections/$(caregiverUid + '_' + patientId)).data.status == 'accepted';
 }
 ```
+
+**Web-Specific Notes**:
+- **Photo Upload**: Medication photos uploaded via File API, stored in Firebase Storage
+- **Form Validation**: Use HTML5 form validation + custom React validators
+- **Timezone Handling**: Store all times in UTC, display in user's local timezone using `Intl.DateTimeFormat`
 
 ---
 
@@ -409,7 +453,7 @@ match /users/{userId}/profiles/{profileId}/medications/{medicationId} {
 
 **FHIR Resource**: `MedicationAdministration` (https://hl7.org/fhir/R4/medicationadministration.html)
 
-**Firestore Path**: `/users/{userId}/patients/{patientId}/medication_requests/{requestId}/administrations/{administrationId}`
+**Firestore Path**: `/medication_administrations/{administrationId}` (flat collection, top-level)
 
 **TypeScript Interface** (FHIR-compliant):
 ```typescript
@@ -566,24 +610,43 @@ interface MedicationAdministrationDocument {
 ```
 
 **Indexes**:
-- Composite: `(medicationId, actualTime)` for time-series queries
-- Composite: `(profileId, actualTime)` for adherence dashboard
-- `userId` (for cross-profile reports)
+- Composite: `(medicationRequestId, effectiveDateTime DESC)` for medication history time-series
+- Composite: `(userId, effectiveDateTime DESC)` for user's adherence dashboard
+- Composite: `(patientId, effectiveDateTime DESC)` for patient-specific reports
+- Single: `userId` (for cross-patient reports, caregiver access)
 
 **Validation Rules**:
 - `actualTime`: Cannot be in the future
 - `actualTime - createdAt <= 24 hours` for edits (edit window)
-- `status`: Must be valid enum value
+- `status`: Must be 'completed', 'not-done', or 'unknown'
+- `administrationStatus`: Must be 'taken', 'missed', or 'taken_late'
 
 **Security Rules**:
 ```javascript
-match /users/{userId}/profiles/{profileId}/medications/{medicationId}/logs/{logId} {
-  allow read: if request.auth.uid == userId || isCaregiver(request.auth.uid, profileId);
-  allow create: if request.auth.uid == userId || isCaregiver(request.auth.uid, profileId);
-  allow update: if (request.auth.uid == userId || isCaregiver(request.auth.uid, profileId))
-                && resource.data.createdAt.toMillis() > request.time.toMillis() - 86400000; // 24h window
+match /medication_administrations/{administrationId} {
+  // Allow read if user owns patient OR is approved caregiver
+  allow read: if request.auth.uid == resource.data.userId 
+              || isApprovedCaregiver(request.auth.uid, resource.data.patientId);
+  
+  // Allow create by patient owner OR approved caregiver
+  allow create: if (request.auth.uid == request.resource.data.userId 
+                    || isApprovedCaregiver(request.auth.uid, request.resource.data.patientId))
+                && request.resource.data.resourceType == 'MedicationAdministration';
+  
+  // Allow update only within 24-hour edit window
+  allow update: if (request.auth.uid == resource.data.userId 
+                    || isApprovedCaregiver(request.auth.uid, resource.data.patientId))
+                && resource.data.meta.createdAt.toMillis() > request.time.toMillis() - 86400000; // 24h
+  
+  // No deletes allowed (audit trail)
+  allow delete: if false;
 }
 ```
+
+**Web-Specific Notes**:
+- **Optimistic Updates**: Update UI immediately, sync to Firestore in background
+- **Offline Logging**: Queue in IndexedDB if offline, sync when online via Service Worker Background Sync
+- **Timestamp Handling**: Use `Timestamp.now()` for server-side timestamps, display in user's local timezone
 
 ---
 
@@ -936,14 +999,21 @@ match /reminder_schedules/{scheduleId} {
 **Rationale for Top-Level Collection**:
 - FamilyConnections: Involves two users (patient & caregiver); simpler queries at top level
 
+**Web Platform Benefits**:
+- **Service Worker Caching**: Cache entire collections offline for instant load
+- **IndexedDB Storage**: Firestore offline persistence uses IndexedDB (50MB+ limit vs 5MB LocalStorage)
+- **Real-time Sync**: `onSnapshot()` listeners update UI instantly when data changes (same API as mobile)
+- **Code Reusability**: Same Firestore queries work on web and mobile (100% portable)
+
 ---
 
 ## Data Model Patterns
 
 ### 1. Denormalization Strategy
-**What**: Store `userId` and `profileId` in nested documents
+**What**: Store `userId` and `patientId` in all documents for fast queries
 **Why**: Faster queries without joins; Firestore doesn't support joins
 **Trade-off**: Data duplication; must update in multiple places if user changes
+**Example**: MedicationAdministration includes `userId`, `patientId`, `medicationRequestId` for direct access
 
 ### 2. Soft Deletes
 **What**: `isArchived` or `isActive` flags instead of deleting documents
@@ -954,11 +1024,13 @@ match /reminder_schedules/{scheduleId} {
 **What**: Store `createdAt`, `updatedAt` as Firestore Timestamps
 **Why**: Consistent timezone handling, sortable, server-side generation
 **Pattern**: Use `serverTimestamp()` on create/update
+**Web Note**: Firebase Timestamp works identically on web and mobile ✅
 
 ### 4. Edit Window Enforcement
-**What**: MedicationLog can only be edited within 24 hours
+**What**: MedicationAdministration can only be edited within 24 hours
 **Why**: Prevents data tampering, maintains audit integrity
-**Implementation**: Security Rules check `resource.data.createdAt`
+**Implementation**: Security Rules check `resource.data.meta.createdAt.toMillis()`
+**Web Note**: Browser DevTools can't bypass server-side timestamp validation ✅
 
 ---
 
@@ -1013,19 +1085,49 @@ interface SchemaVersion {
 ## Performance Optimization
 
 ### Query Optimization
-1. **Composite indexes**: Pre-create for common query patterns
-   - Active medications: `(profileId, isActive, startDate)`
-   - Recent logs: `(medicationId, actualTime DESC)`
-   - Upcoming reminders: `(userId, nextTrigger ASC)`
+1. **Composite indexes**: Pre-create for common query patterns (see firestore.indexes.json)
+   - User's active medications: `(userId, status, authoredOn)`
+   - Patient's medications: `(subject.reference, status, authoredOn)`
+   - Medication history: `(medicationRequestId, effectiveDateTime DESC)`
+   - User's recent logs: `(userId, effectiveDateTime DESC)`
+   - Upcoming reminders: `(userId, nextTriggerTime ASC)`
 
-2. **Pagination**: Limit queries to 50 results, use `startAfter` for infinite scroll
+2. **Pagination**: Limit queries to 50 results, use `startAfter()` for infinite scroll
+   - Web: Intersection Observer API for auto-loading next page
+   - Mobile: FlatList `onEndReached` prop
 
-3. **Denormalization**: Store computed fields (e.g., `adherencePercentage`) to avoid aggregations
+3. **Denormalization**: Store computed fields to avoid aggregations
+   - Example: `adherencePercentage`, `nextDoseTime`, `medicationName` in logs
 
-### Caching Strategy
-1. **Local cache**: Firestore offline persistence (enabled by default)
-2. **AsyncStorage**: Cache user preferences, language, theme
-3. **Memory cache**: React Context for frequently accessed data (current profile, active medications)
+### Web Caching Strategy (Phase 1)
+1. **Firestore Offline Persistence**: Enabled by default, uses IndexedDB (50MB+ limit)
+   ```typescript
+   enableIndexedDbPersistence(firestore).catch((err) => {
+     if (err.code === 'failed-precondition') {
+       // Multiple tabs open, only one can enable persistence
+     } else if (err.code === 'unimplemented') {
+       // Browser doesn't support IndexedDB
+     }
+   });
+   ```
+
+2. **Service Worker Caching**: Cache static assets (JS, CSS, images) and medication photos
+   - Workbox `cache-first` for static assets
+   - Workbox `network-first` for API calls (Firestore REST API)
+   - Stale-while-revalidate for medication photos
+
+3. **LocalStorage**: User preferences, language, theme, onboarding state (< 5MB)
+   - Use `localStorage.getItem('theme')` for instant theme load
+
+4. **Zustand State**: In-memory cache for current session
+   - Current user, selected patient, active medications
+   - Cleared on logout or page refresh
+
+### Mobile Caching Strategy (Phase 2)
+1. **Firestore Offline Persistence**: Uses native SQLite, no size limit
+2. **AsyncStorage**: User preferences, language, theme (no 5MB web limit)
+3. **MMKV**: High-performance key-value storage for frequently accessed data
+4. **React Context**: In-memory cache same as web ✅
 
 ---
 
@@ -1069,13 +1171,22 @@ describe('Medication Security Rules', () => {
 
 ## Status
 
-✅ Data model complete
-✅ TypeScript interfaces defined
-✅ Firestore security rules designed
-✅ Indexes identified
-✅ Validation rules documented
+✅ **Data model complete** (Web-First, FHIR R4-compliant)
+✅ **Collection structure**: Flat top-level collections (Option A)
+✅ **TypeScript interfaces defined**: FHIR-compliant + simplified Firestore documents
+✅ **Firestore security rules designed**: User ownership + caregiver access patterns
+✅ **Composite indexes identified**: 10+ indexes for optimized queries
+✅ **Validation rules documented**: Business logic + FHIR validation
+✅ **Web-specific notes added**: Service Worker, IndexedDB, File API
+✅ **Code reusability**: 100% portable to mobile (same Firestore API)
 
-**Next Steps**: 
-1. Create Firestore Security Rules file (`firestore.rules`)
-2. Create Firestore Indexes file (`firestore.indexes.json`)
-3. Generate API contracts in `contracts/` directory
+**Next Steps (Phase 1 Deliverables)**: 
+1. ✅ `data-model.md` - Complete (this file)
+2. ⏳ `contracts/firestore-security-rules.md` - Generate Firestore Security Rules with test cases
+3. ⏳ `contracts/firestore.indexes.json` - Generate composite indexes JSON
+4. ⏳ `tests/contract/*.test.ts` - Generate contract tests (failing, TDD)
+5. ⏳ `quickstart.md` - Generate 5 integration test scenarios
+
+**Version**: 2.0 (Web-First)  
+**Last Updated**: 2025-10-09  
+**Platform**: Web (Phase 1), Mobile (Phase 2) - 100% data model reusable

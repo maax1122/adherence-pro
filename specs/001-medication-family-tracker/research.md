@@ -1,345 +1,669 @@
-# Research: Medication Family Tracker
+# Research: Medication Family Tracker (Web-First)
 
-**Date**: 2025-10-06
-**Feature**: Medication Family Tracker MVP
-
-## Research Questions & Resolutions
-
-### 1. Cross-Platform Mobile Framework Selection
-
-**Question**: Which framework best supports iOS/Android with offline-first architecture, push notifications, and rapid development for MVP?
-
-**Decision**: React Native with Expo
-
-**Rationale**:
-- **Cross-platform parity**: Single codebase for iOS and Android reduces development time by ~50%
-- **Expo managed workflow**: Simplifies push notifications, OTA updates, and native builds
-- **Offline-first support**: Strong ecosystem for local storage (AsyncStorage, WatermelonDB, Realm)
-- **Firebase integration**: Well-documented React Native Firebase library
-- **Developer experience**: Hot reload, TypeScript support, extensive component libraries
-- **Community & ecosystem**: Large community, React Native Paper for Material Design
-- **MVP speed**: Expo EAS Build for quick beta distribution (TestFlight/Internal Testing)
-
-**Alternatives Considered**:
-- **Flutter**: Excellent performance but team unfamiliar with Dart; steeper learning curve
-- **Native (Swift/Kotlin)**: Best performance but 2x development time; justified only if performance issues arise
-- **Ionic/Capacitor**: Web-based; concerns about notification reliability and offline UX
-
-**References**:
-- React Native Docs: https://reactnative.dev/
-- Expo Docs: https://docs.expo.dev/
-- React Native Firebase: https://rnfirebase.io/
+**Feature**: `001-medication-family-tracker`  
+**Date**: 2025-10-09  
+**Phase**: 0 - Technology Research and Decisions
+**Approach**: Web-First PWA → Mobile Native (Phase 2)
 
 ---
 
-### 2. Backend & Data Storage Strategy
+## Research Summary
 
-**Question**: What backend architecture supports offline-first, real-time sync, authentication, and scales from 100 to 100M users?
+This document consolidates technology choices and architectural decisions for the **web-first implementation** of the Medication Family Tracker. All decisions prioritize:
+1. **Rapid MVP delivery** (4-6 weeks vs 6-8 weeks for mobile)
+2. **Code reusability** for Phase 2 mobile apps (70-90% target)
+3. **Easy testing** (browser-based, no simulator/emulator setup)
+4. **PWA capabilities** (offline, installable, notifications)
 
-**Decision**: Firebase (Auth + Firestore + Cloud Messaging)
+---
 
-**Rationale**:
-- **Offline-first native**: Firestore has built-in offline persistence and automatic sync
-- **Real-time updates**: Live updates for caregiver monitoring without polling
-- **Authentication**: Firebase Auth supports email, Google, Apple sign-in out of the box
-- **Push notifications**: Firebase Cloud Messaging (FCM) integrated with Firestore triggers
-- **Scalability**: Auto-scales from MVP to millions of users; pay-as-you-go pricing
-- **Security**: Firestore Security Rules for fine-grained access control (patient/caregiver roles)
-- **Development speed**: No backend code needed for MVP; focus on mobile app
+## Decision 1: Frontend Framework - React 18+ with Vite
 
-**Alternatives Considered**:
-- **Supabase**: Great Postgres alternative, but weaker offline story; more complex setup
-- **AWS Amplify**: Powerful but steeper learning curve; overkill for MVP
-- **Custom Node.js backend**: Full control but requires backend development, devops, scaling effort
+### Decision
+Use **React 18+** with **Vite 5+** as the frontend framework and build tool.
 
-**Trade-offs**:
-- **Vendor lock-in**: Firebase is proprietary; migration path exists but costly
-- **Cost at scale**: Can become expensive at 100M users; mitigation: optimize queries, consider hybrid approach later
-- **Query limitations**: Firestore queries less flexible than SQL; acceptable for MVP use cases
+### Rationale
+1. **Code Reusability**: React's component model translates directly to React Native (~80% component logic reusable)
+2. **Performance**: Vite provides instant HMR (Hot Module Replacement), < 1s dev server startup, optimized production builds
+3. **Ecosystem**: Largest ecosystem of libraries, tools, and community support
+4. **TypeScript Support**: First-class TypeScript integration out of the box
+5. **Modern Features**: React 18 concurrent features, automatic batching, Suspense for data fetching
+6. **Team Familiarity**: React is industry standard, easier to find developers
+7. **Testing Velocity**: Browser DevTools + instant refresh = faster debugging than mobile simulators
+
+### Alternatives Considered
+- **Vue 3 + Vite**: Great DX, but lower reusability for mobile (no Vue Native equivalent)
+- **Svelte + SvelteKit**: Smaller bundle size, but immature ecosystem and no mobile path
+- **Next.js 14**: Full-stack framework, but overkill for PWA (we use Firebase backend, not Node.js)
+- **Create React App**: Outdated, slow builds, Webpack-based (Vite is 10x faster)
+
+### Performance Metrics
+- **Dev server startup**: < 1 second (Vite) vs 30+ seconds (Webpack)
+- **HMR**: < 50ms (Vite) vs 500ms+ (Webpack)
+- **Production build**: < 30 seconds for MVP codebase
+
+**Conclusion**: React + Vite offers best balance of performance, reusability, and ecosystem maturity.
+
+**References**:
+- React 18 Docs: https://react.dev/
+- Vite Docs: https://vitejs.dev/
+
+---
+
+## Decision 2: UI Component Library - Material UI (MUI) v5
+
+### Decision
+Use **Material UI (MUI) v5** as the primary component library.
+
+### Rationale
+1. **Comprehensive**: 50+ pre-built accessible components (buttons, inputs, modals, date pickers, etc.)
+2. **Accessibility**: WCAG 2.1 AA compliant out of the box, screen reader support, keyboard navigation
+3. **Responsive**: Mobile-first responsive components, breakpoint system, Grid/Stack layouts
+4. **Customizable**: Powerful theming system with TypeScript support, CSS-in-JS (Emotion)
+5. **Material Design**: Google's design system, familiar to users, consistent with Android
+6. **Documentation**: Excellent docs and examples, large community (85k+ GitHub stars)
+7. **Active Maintenance**: Regular updates, React 18 compatible
+
+### Alternatives Considered
+- **Chakra UI**: Great DX, smaller bundle, but less comprehensive component library (no date pickers, data tables)
+- **Ant Design**: Enterprise-focused, heavy bundle size (1MB+), less modern design
+- **Tailwind CSS + Headless UI**: Most flexible, but requires building every component from scratch (slower MVP)
+- **Native HTML + CSS**: Maximum control, but reinventing the wheel (accessibility hard to get right)
+
+### Bundle Size Impact
+- **MUI core**: ~120KB gzipped (acceptable for MVP)
+- **Tree-shaking**: Only imports used components
+- **Code-splitting**: Lazy load pages to keep initial bundle < 200KB
+
+**Conclusion**: MUI provides best balance of features, accessibility, and developer productivity for MVP.
+
+**References**:
+- MUI Docs: https://mui.com/
+- MUI Accessibility: https://mui.com/material-ui/guides/accessibility/
+
+---
+
+## Decision 3: State Management - Zustand
+
+### Decision
+Use **Zustand** for global state management, **React Context** for localized state (theme, i18n).
+
+### Rationale
+1. **Simplicity**: Minimal boilerplate, no providers/wrappers needed
+2. **TypeScript**: Excellent TypeScript support with type inference
+3. **Performance**: Selective subscriptions, no unnecessary re-renders (React.memo not needed)
+4. **Bundle Size**: Only 1.2KB gzipped vs Redux (10KB+), Redux Toolkit (15KB+)
+5. **DevTools**: Redux DevTools integration for debugging
+6. **Learning Curve**: Easy to learn, similar to React hooks (useState-like API)
+7. **Mobile Reusability**: Zustand works with React Native (100% compatible)
+
+### Alternatives Considered
+- **Redux Toolkit**: Industry standard, but overkill for MVP (heavy boilerplate, steep learning curve)
+- **Recoil**: Facebook's state library, but immature (0.7.x), less adopted, future uncertain
+- **Jotai**: Atomic state, but more complex mental model, smaller ecosystem
+- **React Context only**: Sufficient for simple cases, but performance issues with frequent updates (triggers all consumers)
+
+### Store Structure (Planned)
+```typescript
+// stores/authStore.ts
+interface AuthStore {
+  user: User | null;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+}
+
+// stores/medicationStore.ts
+interface MedicationStore {
+  medications: Medication[];
+  loading: boolean;
+  fetchMedications: (patientId: string) => Promise<void>;
+  addMedication: (medication: Medication) => Promise<void>;
+}
+```
+
+**Conclusion**: Zustand offers simplicity and performance without sacrificing features.
+
+**References**:
+- Zustand Docs: https://zustand-demo.pmnd.rs/
+- Zustand vs Redux: https://blog.logrocket.com/zustand-vs-redux/
+
+---
+
+## Decision 4: Routing - React Router v6
+
+### Decision
+Use **React Router v6** for client-side routing.
+
+### Rationale
+1. **Industry Standard**: Most popular React routing library (51k+ stars)
+2. **Declarative**: Component-based route definitions
+3. **Code Splitting**: Lazy loading routes for better performance (`React.lazy()`)
+4. **Nested Routes**: Supports complex layouts and nested navigation
+5. **TypeScript**: Full TypeScript support with type-safe route params
+6. **Mobile Reusability**: Similar concepts to React Navigation (mobile), easier migration in Phase 2
+
+### Alternatives Considered
+- **TanStack Router**: Type-safe, but new and less mature (v1.0 released 2023)
+- **Wouter**: Minimalist (1.5KB), but lacks features (no nested routes, no lazy loading)
+- **Reach Router**: Deprecated, merged into React Router v6
+
+### Planned Routes
+```
+/ → Landing page (logged out)
+/login → Login page
+/register → Registration page
+/dashboard → Main dashboard (logged in)
+/medications → Medication list
+/medications/:id → Medication details
+/medications/new → Add medication
+/family → Family management
+/settings → User settings
+```
+
+**Conclusion**: React Router v6 is battle-tested and feature-complete.
+
+**References**:
+- React Router v6 Docs: https://reactrouter.com/
+
+---
+
+## Decision 5: Backend - Firebase (Serverless)
+
+### Decision
+Use **Firebase** for backend services:
+- **Firebase Authentication**: Email/password, Google sign-in (Apple sign-in Phase 2 only)
+- **Cloud Firestore**: NoSQL database with offline support
+- **Firebase Cloud Messaging (FCM)**: Web push notifications
+- **Firebase Hosting**: Static site hosting for PWA
+- **Firebase Cloud Functions**: Serverless functions (caregiver alerts, missed dose detection)
+
+### Rationale
+1. **Serverless**: No server management, auto-scaling from 100 to 100M users
+2. **Offline-First**: Firestore has built-in offline persistence and automatic sync
+3. **Real-time Sync**: Automatic data synchronization across devices (caregiver monitoring)
+4. **Security**: Declarative security rules, no exposed API keys
+5. **Free Tier**: Generous free tier for MVP (50k reads, 20k writes/day, 10GB storage)
+6. **Mobile Reusability**: Same Firebase SDK works on React Native (100% reusable services)
+7. **Integrated Services**: Auth + Database + Messaging + Hosting in one platform (single SDK)
+
+### Alternatives Considered
+- **Supabase**: Open-source Firebase alternative, but less mature, no built-in offline support for web
+- **AWS Amplify**: Powerful, but complex setup, steep learning curve, overkill for MVP
+- **Custom Node.js + PostgreSQL**: Maximum control, but requires server management, slower to build, no offline sync
+- **PocketBase**: Self-hosted, no managed services, limited scaling, no web push notifications
+
+### Firebase Pricing Estimate (MVP Phase)
+- **Spark (Free) Plan**: 50k reads/day, 20k writes/day, 10GB storage (sufficient for 100-500 users)
+- **Blaze (Pay-as-you-go)**: $0.06/100k reads, $0.18/100k writes (scales cost-effectively)
+- **Estimated cost at 10k users**: ~$25-50/month
+
+**Conclusion**: Firebase provides fastest time-to-market with excellent offline support and mobile reusability.
 
 **References**:
 - Firebase Docs: https://firebase.google.com/docs
+- Firestore for Web: https://firebase.google.com/docs/firestore/quickstart
+- Firebase Pricing: https://firebase.google.com/pricing
+
+---
+
+## Decision 6: Data Model - FHIR R4 Compliant
+
+### Decision
+Use **FHIR R4** (Fast Healthcare Interoperability Resources) standard for data model.
+
+### Rationale
+1. **Healthcare Standard**: Industry-standard for health data interoperability (used by Epic, Cerner, etc.)
+2. **Future-Proof**: Enables integration with EHRs, pharmacies, telemedicine platforms in Phase 3+
+3. **Structured**: Well-defined resources (Patient, MedicationRequest, MedicationAdministration)
+4. **Extensible**: Support for extensions without breaking compatibility
+5. **Validation**: Schema validation reduces data quality issues
+6. **Developer Experience**: Clear documentation and TypeScript types
+7. **100% Reusable**: Same FHIR types work on web and mobile (no platform-specific changes)
+
+**FHIR Resources Used**:
+- `Patient`: User/family member profiles (name, DOB, gender, photo)
+- `MedicationRequest`: Prescribed medications (drug name, dosage, frequency, instructions)
+- `MedicationAdministration`: Medication intake logs (timestamp, dose, notes)
+- `RelatedPerson`: Caregiver relationships (caregiver linked to patient)
+- `CareTeam`: Family care team structure (patient + list of caregivers)
+- `ReminderSchedule`: Custom extension for reminder scheduling (time, frequency, timezone)
+
+### Alternatives Considered
+- **Custom Schema**: Faster initially, but no interoperability, harder to extend, reinventing the wheel
+- **HL7 v2**: Legacy format, not JSON-friendly, outdated
+- **OpenEHR**: Academic, limited tooling, not widely adopted
+
+**Conclusion**: FHIR provides structure without sacrificing flexibility, enables future integrations.
+
+**References**:
+- FHIR R4 Spec: https://hl7.org/fhir/R4/
+- FHIR MedicationRequest: https://hl7.org/fhir/R4/medicationrequest.html
+
+---
+
+## Decision 7: Notifications - Web Push API (FCM)
+
+### Decision
+Use **Firebase Cloud Messaging (FCM)** with **Web Push API** for browser notifications.
+
+### Rationale
+1. **Cross-Browser**: Works on Chrome 90+, Firefox 88+, Edge 90+, Safari 16+ (limited)
+2. **Background Notifications**: Service Worker enables notifications when tab is closed (if PWA installed)
+3. **Firebase Integration**: Single SDK for web and mobile notifications (code reusability)
+4. **Free**: Unlimited push notifications (no cost)
+5. **Delivery Tracking**: Can track notification delivery and clicks via FCM analytics
+
+**Limitations Acknowledged** (from Session 2 Clarifications):
+- **Permission Required**: User must grant notification permission (target ≥70% grant rate)
+- **Safari Limitations**: No background notifications without PWA install (Safari 16.4+ only)
+- **Browser Closed**: Notifications only delivered if browser is running (unless PWA installed)
+- **Less Reliable than Native**: ~80-90% delivery rate vs 95%+ for native mobile (Phase 2 improves this)
+
+### Implementation Strategy
+1. **Primary**: Web Push API via Service Worker (when browser open or PWA installed)
+2. **Fallback**: In-app alerts (when notifications denied or not supported)
+3. **Upgrade Path**: Phase 2 native apps provide guaranteed notification delivery
+
+### Alternatives Considered
+- **OneSignal**: Third-party service, better Safari support, but adds dependency, costs money after 1000 users
+- **Pusher Beams**: Good reliability, but costs money ($0.01/device/month)
+- **Custom WebSocket**: Maximum control, but requires server infrastructure, complex implementation
+
+**Conclusion**: FCM + Web Push API provides best balance for MVP, with clear upgrade path to native notifications in Phase 2.
+
+**References**:
+- FCM for Web: https://firebase.google.com/docs/cloud-messaging/js/client
+- Web Push API: https://developer.mozilla.org/en-US/docs/Web/API/Push_API
+
+---
+
+## Decision 8: Offline Support - Service Worker + IndexedDB
+
+### Decision
+Use **Service Worker API** with **Workbox** for offline caching, **IndexedDB** for local data storage, **Firestore offline persistence** for database sync.
+
+### Rationale
+1. **PWA Standard**: Service Worker is PWA core technology (required for installability)
+2. **Automatic Sync**: Firestore handles sync automatically when online (no manual queuing)
+3. **Cache Strategies**: Workbox provides pre-configured caching strategies (cache-first, network-first, stale-while-revalidate)
+4. **Offline UI**: Can detect offline state and show appropriate UI (banner, disabled buttons)
+5. **Performance**: Cached assets load instantly on repeat visits (< 100ms vs 3s over network)
+6. **Background Sync**: Service Worker can retry failed writes when back online
+
+**Offline Capabilities** (from spec.md FR-031 to FR-036):
+- ✅ View medication list and history
+- ✅ Log medication intake (syncs when online)
+- ✅ View scheduled reminders
+- ✅ View family profiles
+- ❌ Initial login/registration (requires online)
+- ❌ Sending caregiver invitations (requires online)
+- ❌ Receiving real-time updates from caregivers (requires online)
+
+### Alternatives Considered
+- **LocalStorage**: 5-10MB limit, synchronous API (blocks UI), no structured data
+- **Dexie.js (IndexedDB wrapper)**: Good abstraction, but unnecessary (Firestore handles sync)
+- **Service Worker only**: No local data persistence for structured data
+
+### Caching Strategy
+```
+Cache-First: Static assets (JS, CSS, images, fonts)
+Network-First: API calls (Firebase Firestore)
+Stale-While-Revalidate: Medication photos
+```
+
+**Conclusion**: Service Worker + IndexedDB + Firestore offline persistence provides robust offline-first experience.
+
+**References**:
+- Service Workers: https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API
+- Workbox: https://developers.google.com/web/tools/workbox
 - Firestore Offline: https://firebase.google.com/docs/firestore/manage-data/enable-offline
 
 ---
 
-### 3. Local Notification Scheduling (Offline Reminders)
+## Decision 9: Testing Stack - Vitest + RTL + Playwright
 
-**Question**: How to schedule notifications that fire even when app is closed or device offline?
+### Decision
+Use **Vitest** for unit/integration tests, **React Testing Library** for component tests, **Playwright** for E2E tests, **Firebase Emulator Suite** for contract tests.
 
-**Decision**: Expo Notifications API with local scheduling
+### Rationale
+1. **Vitest**: Vite-native test runner, instant HMR, 10-20x faster than Jest, same API as Jest (easy migration)
+2. **React Testing Library**: Best practice for testing React components (user-centric, accessibility-focused)
+3. **Playwright**: Modern E2E testing, supports Chrome/Firefox/Safari, auto-wait features, parallel execution
+4. **Firebase Emulator**: Test Firestore security rules locally without hitting production (free, fast)
+5. **TypeScript Support**: All tools have excellent TypeScript support
+6. **Browser Testing**: Instant feedback (F5 in browser) vs mobile simulators (5-10 min rebuild)
 
-**Rationale**:
-- **Works offline**: Local notifications scheduled on device, no server required
-- **Background execution**: Notifications fire even when app is terminated
-- **Cross-platform**: Single API for iOS and Android notification permissions and scheduling
-- **Recurring schedules**: Supports daily, weekly patterns for medication reminders
-- **Actionable notifications**: Can add "Taken" / "Missed" action buttons (iOS/Android differ)
+**Test Strategy** (from constitution):
+- **Unit tests**: Services, utilities, hooks (isolated logic) - 80% coverage
+- **Component tests**: React components (RTL, user interactions) - All critical UI flows
+- **Integration tests**: User flows (auth, medication CRUD, reminders) - 5 scenarios from spec.md
+- **Contract tests**: Firestore security rules (Firebase Emulator) - All CRUD operations
+- **E2E tests**: Critical paths (Playwright, real browser) - Happy paths only for MVP
 
-**Implementation Approach**:
-1. When medication added/edited, calculate all future reminder times (next 30 days)
-2. Schedule local notifications using Expo Notifications
-3. On app open, reschedule if needed (handle timezone changes, medication updates)
-4. User action on notification → log intake → update Firestore → reschedule
+### Alternatives Considered
+- **Jest**: Industry standard, but slower (Webpack-based), harder to configure with Vite, heavier bundle
+- **Cypress**: Popular E2E tool, but slower than Playwright, no Safari support, flaky tests
+- **Testing Library (standalone)**: Good, but Vitest integration is better (in-source testing)
 
-**Alternatives Considered**:
-- **Firebase Cloud Messaging only**: Requires internet; fails offline (dealbreaker)
-- **React Native Push Notification**: More manual setup; Expo abstracts complexity better
+### Performance Benchmarks
+- **Vitest**: Run 100 unit tests in < 1 second
+- **Playwright**: Run 10 E2E tests in < 30 seconds
+- **Jest**: Run 100 unit tests in 10-15 seconds (baseline comparison)
 
-**Edge Cases to Handle**:
-- Device powered off at reminder time: Notification delivered when powered on (OS behavior)
-- Timezone changes: Re-schedule on app open if timezone detected change
-- Notification limit (iOS ~64, Android unlimited): Schedule rolling 30-day window, refresh weekly
-
-**References**:
-- Expo Notifications: https://docs.expo.dev/versions/latest/sdk/notifications/
-- iOS Notification Best Practices: https://developer.apple.com/design/human-interface-guidelines/notifications
-
----
-
-### 4. Offline Sync Conflict Resolution
-
-**Question**: How to handle conflicts when same medication logged on multiple devices offline?
-
-**Decision**: Last-Write-Wins (LWW) for MVP; defer complex CRDT to future
-
-**Rationale**:
-- **Simplicity**: LWW is Firestore's default behavior; no custom logic needed
-- **MVP scope**: Clarification confirmed "not solved in MVP"
-- **Acceptable trade-off**: Edge case (same medication logged simultaneously on 2 devices) is rare
-- **User mitigation**: UI shows sync status; users can manually correct if needed
-
-**Future Consideration**:
-- Phase 2+: Implement operational transforms or CRDT for mergeable conflicts
-- Log all versions with timestamps for audit trail
+**Conclusion**: Vitest + RTL + Playwright provides fastest, most comprehensive testing with excellent DX.
 
 **References**:
-- Firestore Transactions: https://firebase.google.com/docs/firestore/manage-data/transactions
-
----
-
-### 5. Performance Optimization for 300ms Response Time
-
-**Question**: How to ensure p95 < 300ms for UI actions (logging intake, viewing history)?
-
-**Decision**: Optimistic UI updates + local-first architecture
-
-**Rationale**:
-- **Optimistic updates**: Update local state immediately, sync to Firestore in background
-- **Local-first reads**: Read from AsyncStorage/Firestore offline cache (instant), sync from server in background
-- **Lazy loading**: Paginate medication logs (load 30 days initially, infinite scroll for older)
-- **Memoization**: Use React.memo, useMemo, useCallback to prevent unnecessary re-renders
-- **Image optimization**: Compress medication photos, lazy load avatars
-
-**Performance Testing Strategy**:
-- Integration tests assert response times: `expect(duration).toBeLessThan(300)`
-- React Native Performance Monitor during development
-- Production monitoring: Firebase Performance Monitoring SDK
-
-**References**:
-- React Native Performance: https://reactnative.dev/docs/performance
-- Firebase Performance: https://firebase.google.com/docs/perf-mon
-
----
-
-### 6. Caregiver Notifications (Push When Patient Misses Dose)
-
-**Question**: How to notify caregivers when patient misses a scheduled medication?
-
-**Decision**: Firestore Cloud Functions + FCM push notifications
-
-**Rationale**:
-- **Server-side logic**: Cloud Function triggered when reminder time passes without log entry
-- **Reliable delivery**: FCM handles push to all caregiver devices with active connections
-- **Scalable**: Cloud Functions auto-scale; no server management
-- **Graceful degradation**: If device offline, notification queued until online
-
-**Implementation Flow**:
-1. When medication reminder created → schedule Cloud Function for reminder time + 15 min grace period
-2. Cloud Function checks: Has medication been logged?
-3. If not logged → query family_connections for caregivers → send FCM to caregiver device tokens
-4. Caregiver receives push: "Mom missed her 8 AM Aspirin dose"
-
-**Alternatives Considered**:
-- **Client-side check**: Unreliable if app closed; requires background tasks (limited on iOS)
-- **Polling**: Inefficient; increases battery drain and Firestore reads
-
-**References**:
-- Cloud Functions: https://firebase.google.com/docs/functions
-- FCM: https://firebase.google.com/docs/cloud-messaging
-
----
-
-### 7. Internationalization (i18n) for English & Vietnamese
-
-**Question**: How to support bilingual UI with RTL-ready architecture?
-
-**Decision**: react-i18next with JSON language files
-
-**Rationale**:
-- **Industry standard**: Most popular i18n library for React/React Native
-- **Easy integration**: Hooks-based API fits React paradigm
-- **Scalable**: Add new languages by adding JSON files
-- **Pluralization & formatting**: Built-in support for dates, numbers, plurals
-- **Fallback**: Defaults to English if translation missing
-
-**Implementation**:
-- Language files: `src/i18n/en.json`, `src/i18n/vi.json`
-- User selects language in settings → stored in AsyncStorage
-- All UI strings use `t('key')` instead of hardcoded text
-
-**References**:
-- react-i18next: https://react.i18next.com/
-- Vietnamese localization guide: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl
-
----
-
-### 8. Testing Strategy for Offline-First App
-
-**Question**: How to test offline scenarios, notifications, and cross-platform parity?
-
-**Decision**: Multi-layer testing: Unit (Jest) + Integration (React Native Testing Library) + E2E (Detox) + Firebase Emulator
-
-**Rationale**:
-- **Unit tests**: Fast, test individual functions/components in isolation
-- **Integration tests**: Test user flows with mocked Firebase (Firebase Emulator Suite)
-- **E2E tests**: Detox for real device testing (critical for notifications, offline behavior)
-- **Firebase Emulator**: Test Firestore rules, Cloud Functions locally without hitting production
-
-**Test Coverage Goals**:
-- Unit tests: 80% coverage for utils, services, hooks
-- Integration tests: All user scenarios from spec.md (5 acceptance scenarios)
-- E2E tests: Happy paths for each major flow (add medication, receive reminder, caregiver monitoring)
-- Contract tests: Firestore schema validation (ensure models match database structure)
-
-**References**:
-- Jest: https://jestjs.io/
-- React Native Testing Library: https://callstack.github.io/react-native-testing-library/
-- Detox: https://wix.github.io/Detox/
+- Vitest: https://vitest.dev/
+- React Testing Library: https://testing-library.com/react
+- Playwright: https://playwright.dev/
 - Firebase Emulator: https://firebase.google.com/docs/emulator-suite
 
 ---
 
-### 9. Security & Privacy (GDPR & Vietnam Decree 13)
+## Decision 10: Hosting & CI/CD - Firebase Hosting + GitHub Actions
 
-**Question**: How to ensure compliance with data protection regulations?
+### Decision
+Use **Firebase Hosting** for production deployment, **GitHub Actions** for CI/CD pipeline.
 
-**Decision**: Firebase Security Rules + data encryption + user consent flows
+### Rationale
+1. **Integrated**: Firebase Hosting integrates seamlessly with Firestore, Auth, Cloud Functions
+2. **Global CDN**: Automatic CDN distribution, < 100ms latency worldwide (150+ edge locations)
+3. **SSL**: Free SSL certificates, automatic HTTPS (required for Service Workers)
+4. **Custom Domain**: Support for custom domains (e.g., adherence.app)
+5. **Preview Channels**: Deploy preview URLs for pull requests (e.g., `pr-123--adherence.web.app`)
+6. **GitHub Actions**: Free for public repos, 2000 minutes/month for private repos
+7. **Rollback**: Easy rollback to previous deployments
 
-**Rationale**:
-- **Firestore Security Rules**: Enforce patient/caregiver access control at database level
-- **Encryption**: Firebase encrypts data at rest and in transit (TLS) by default
-- **User consent**: In-app privacy policy acceptance on first launch; GDPR consent for EU users
-- **Data export**: Manual export flow (admin panel) for MVP; automated in Phase 2
-- **Data deletion**: Cloud Function to recursively delete user data when account deleted
+**CI/CD Pipeline**:
+1. Pull request → Run tests (unit, integration, contract) → Deploy to preview channel
+2. Tests pass → Deploy to preview → Comment preview URL on PR
+3. Merge to main → Run tests → Deploy to production → Run E2E smoke tests
 
-**Security Rules Example**:
-```javascript
-// Firestore Security Rules
-match /medications/{medicationId} {
-  allow read: if isOwnerOrCaregiver(request.auth.uid, resource.data.userId);
-  allow write: if isOwnerOrCaregiver(request.auth.uid, resource.data.userId);
-}
-```
+### Alternatives Considered
+- **Vercel**: Great DX, but costs money for team collaboration ($20/user/month)
+- **Netlify**: Good, but less integrated with Firebase backend, no preview channels in free tier
+- **AWS S3 + CloudFront**: Cheapest, but requires manual configuration, no preview channels, complex SSL setup
+- **GitHub Pages**: Free, but no dynamic backend, no preview channels, no custom headers
 
-**Privacy Policy Requirements**:
-- What data collected: Name, email, medication names, intake logs, photos
-- How used: Reminders, adherence tracking, caregiver notifications
-- Not shared with third parties (unless required by law)
-- User rights: Access, export, delete data
+**Conclusion**: Firebase Hosting provides best integration with Firebase backend and excellent free tier.
 
 **References**:
-- GDPR Compliance: https://gdpr.eu/
-- Vietnam Decree 13: https://www.dataguidance.com/notes/vietnam-data-protection-overview
-- Firebase Security: https://firebase.google.com/docs/rules
+- Firebase Hosting: https://firebase.google.com/docs/hosting
+- GitHub Actions: https://docs.github.com/en/actions
 
 ---
 
-### 10. PRN (As-Needed) Medications Implementation
+## Additional Web-Specific Decisions
 
-**Question**: How to support PRN medications with caregiver instructions (what, how much, when, visual)?
+### TypeScript Configuration
+- **Strict Mode**: Enabled (`strict: true`, `noImplicitAny: true`, `strictNullChecks: true`)
+- **Target**: ES2020 (modern browsers only, IE11 not supported)
+- **Module**: ESNext (Vite handles bundling to ES modules)
+- **Path Aliases**: `@/` maps to `src/` for cleaner imports (e.g., `import { auth } from '@/services/auth'`)
 
-**Decision**: Extend Medication model with optional PRN fields; separate UI flow
+### Code Quality
+- **ESLint**: TypeScript + React + React Hooks rules + Airbnb style guide
+- **Prettier**: Single quotes, 2 spaces, trailing commas, max line width 100
+- **Husky**: Pre-commit hooks (lint + format + type check)
+- **Commitlint**: Conventional commits (feat, fix, docs, test, chore, etc.)
+- **lint-staged**: Run linters only on staged files (faster)
 
-**Rationale**:
-- **Data model**: `isPRN: boolean`, `prnInstructions: { what, howMuch, whenToTake, visualDescription, photoUrl }`
-- **No scheduled reminders**: PRN medications don't auto-remind; patient/caregiver logs manually
-- **Caregiver UX**: Form to add detailed instructions; photo upload for visual identification
-- **Patient UX**: Browse PRN medications; tap to log intake with timestamp
+### PWA Configuration
+- **Manifest**: App name, icons (192x192, 512x512), theme color, start URL, display mode
+- **Service Worker**: Workbox with precache (all static assets) + runtime caching (API calls, images)
+- **Install Prompt**: Custom "Add to Home Screen" banner (triggered after 2+ visits)
+- **Offline Page**: Fallback page when fully offline (dinosaur game easter egg)
+- **Update Strategy**: Prompt user to refresh when new version available
 
-**UI Flow**:
-1. Caregiver adds PRN medication: "Tylenol for pain"
-2. Instructions: "Take 1-2 tablets when headache occurs. Max 6 tablets per day. White round pill."
-3. Photo: Upload image of Tylenol bottle
-4. Patient views PRN list → sees instructions → taps "Log Intake" → records timestamp
+### Performance Optimization
+- **Code Splitting**: React.lazy() for route-based splitting (each page loads only its code)
+- **Image Optimization**: WebP format with PNG fallback, lazy loading, responsive images
+- **Bundle Analysis**: webpack-bundle-analyzer for size monitoring (target < 200KB initial bundle)
+- **Lighthouse CI**: Automated performance audits in CI/CD (block PR if score < 90)
+- **Tree Shaking**: Vite automatically removes unused code
+- **Font Optimization**: Use system fonts or preload web fonts
 
-**References**:
-- PRN Medication Best Practices: https://www.ashp.org/pharmacy-practice/resource-centers/patient-safety
+### Internationalization (i18n)
+- **Library**: react-i18next with i18next
+- **Languages**: English (default), Vietnamese (MVP)
+- **Format**: JSON files (`src/i18n/en.json`, `src/i18n/vi.json`)
+- **Pluralization**: Built-in support for plural forms
+- **Date/Number Formatting**: Use Intl API for locale-aware formatting
+- **Storage**: User language preference stored in localStorage
+- **100% Reusable**: Same i18n files work for mobile in Phase 2
 
 ---
 
 ## Technology Stack Summary
 
-| Component | Technology | Rationale |
-|-----------|-----------|-----------|
-| **Mobile Framework** | React Native + Expo | Cross-platform, fast MVP, offline-first ecosystem |
-| **Language** | TypeScript | Type safety, better DX, catches errors at compile time |
-| **UI Library** | React Native Paper | Material Design, accessibility, theme support |
-| **Navigation** | Expo Router | File-based routing, deep linking, type-safe |
-| **State Management** | React Context + Custom Hooks | Simple, no Redux overhead for MVP |
-| **Backend** | Firebase (Auth, Firestore, FCM) | Serverless, auto-scaling, offline-first, push notifications |
-| **Local Storage** | AsyncStorage | Simple key-value, works offline, async API |
-| **Notifications** | Expo Notifications API | Local scheduling, cross-platform, works offline |
-| **Testing** | Jest + React Native Testing Library + Detox | Unit, integration, E2E coverage |
-| **Internationalization** | react-i18next | Industry standard, supports Vietnamese |
-| **CI/CD** | Expo EAS Build + GitHub Actions | Automated builds, TestFlight/Play Store distribution |
-| **Monitoring** | Firebase Crashlytics + Performance | Real-time crash reports, performance metrics |
+| Component | Web (Phase 1) | Mobile (Phase 2) | Reusability |
+|-----------|---------------|------------------|-------------|
+| **Frontend Framework** | React 18+ | React Native + Expo | 80% (component logic) |
+| **Build Tool** | Vite 5+ | Metro (Expo) | N/A (platform-specific) |
+| **Language** | TypeScript | TypeScript | 100% |
+| **UI Library** | Material UI v5 | React Native Paper | 10% (concepts only) |
+| **Routing** | React Router v6 | React Navigation | 20% (route structure) |
+| **State Management** | Zustand | Zustand | 100% |
+| **Backend** | Firebase | Firebase | 100% |
+| **Offline Storage** | Service Worker + IndexedDB | AsyncStorage + MMKV | 90% (same API) |
+| **Notifications** | Web Push API (FCM) | Expo Notifications | 80% (same FCM logic) |
+| **Testing** | Vitest + RTL + Playwright | Jest + RTL + Detox | 85% (test logic) |
+| **i18n** | react-i18next | react-i18next | 100% |
+| **CI/CD** | GitHub Actions + Firebase Hosting | GitHub Actions + EAS Build | 70% (workflows) |
+
+**Overall Reusability Estimate**: **70-85%** of codebase (business logic, services, types, utilities, translations)
 
 ---
 
-## Architecture Decisions
+## Architecture Diagram
 
-### Offline-First Architecture
-- **Local storage as source of truth**: App reads from local cache first
-- **Background sync**: Firestore sync happens in background when online
-- **Optimistic updates**: UI updates immediately, queue sync operations
-- **Conflict resolution**: Last-write-wins for MVP
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Browser / PWA (Phase 1)                  │
+├─────────────────────────────────────────────────────────────┤
+│  React UI (Material UI)                                    │
+│  ├── Pages (React Router routes)                           │
+│  │   ├── /login, /register, /dashboard                     │
+│  │   ├── /medications, /medications/:id                    │
+│  │   └── /family, /settings                                │
+│  ├── Components (buttons, forms, modals, cards)            │
+│  └── State (Zustand stores)                                │
+│      ├── authStore (user, login, logout)                   │
+│      ├── medicationStore (CRUD, loading)                   │
+│      ├── familyStore (caregivers, connections)             │
+│      └── notificationStore (permissions, subscriptions)    │
+├─────────────────────────────────────────────────────────────┤
+│  Service Layer (70-90% reusable for mobile)               │
+│  ├── Firebase Auth (login, register, Google OAuth)        │
+│  ├── Firestore Service (CRUD operations, real-time sync)  │
+│  ├── Notification Service (FCM Web Push, permissions)     │
+│  ├── Reminder Scheduler (cron-like logic, timezone)       │
+│  ├── Offline Sync (Service Worker + Firestore cache)      │
+│  └── FHIR Types (Patient, MedicationRequest, etc.)        │
+├─────────────────────────────────────────────────────────────┤
+│  Service Worker (PWA capabilities)                        │
+│  ├── Workbox (caching strategies)                         │
+│  │   ├── Cache-First: Static assets (JS, CSS, images)    │
+│  │   ├── Network-First: API calls                         │
+│  │   └── Stale-While-Revalidate: Medication photos       │
+│  ├── FCM Service Worker (push notifications)              │
+│  ├── Background Sync (retry failed writes)                │
+│  └── Offline Fallback (custom offline page)               │
+└─────────────────────────────────────────────────────────────┘
+                            ↓↑ HTTPS / WebSocket
+┌─────────────────────────────────────────────────────────────┐
+│                      Firebase Backend                       │
+├─────────────────────────────────────────────────────────────┤
+│  Authentication (Email, Google, Apple [Phase 2])          │
+│  ├── User management (create, login, reset password)      │
+│  └── Token validation (JWT, refresh tokens)               │
+├─────────────────────────────────────────────────────────────┤
+│  Cloud Firestore (NoSQL database)                         │
+│  ├── Collections: patients, medication_requests,          │
+│  │   medication_administrations, family_connections,      │
+│  │   related_persons, care_teams, reminder_schedules      │
+│  ├── Security Rules (row-level access control)            │
+│  ├── Indexes (composite indexes for queries)              │
+│  ├── Offline Persistence (automatic sync)                 │
+│  └── Real-time Listeners (caregiver monitoring)           │
+├─────────────────────────────────────────────────────────────┤
+│  Cloud Messaging (FCM)                                     │
+│  ├── Web push notifications (browser)                     │
+│  ├── Topic subscriptions (family alerts)                  │
+│  └── Device token management                              │
+├─────────────────────────────────────────────────────────────┤
+│  Cloud Functions (serverless)                             │
+│  ├── checkMissedDoses() - Scheduled every 30 min         │
+│  ├── sendCaregiverAlert() - Notify on missed dose        │
+│  ├── cleanupExpiredReminders() - Daily cleanup           │
+│  └── deleteUserData() - GDPR compliance (delete account) │
+├─────────────────────────────────────────────────────────────┤
+│  Firebase Hosting (CDN, SSL, preview channels)            │
+│  ├── Production: adherence.web.app                        │
+│  ├── Preview: pr-123--adherence.web.app                   │
+│  └── Custom Domain: adherence.app                         │
+└─────────────────────────────────────────────────────────────┘
+```
 
-### Notification Architecture
-- **Local notifications**: Scheduled on device for reliability
-- **FCM for caregiver alerts**: Server-side trigger via Cloud Functions
-- **Graceful degradation**: App functional even if notifications disabled
+---
 
-### Data Architecture
-- **Firestore collections**: users, profiles, medications, medication_logs, family_connections, reminder_schedules
-- **Subcollections**: medications/{medId}/logs for better query performance
-- **Denormalization**: Store user name in medication for faster reads (acceptable trade-off)
+## Offline-First Architecture
 
-### Security Architecture
-- **Firebase Security Rules**: Database-level access control
-- **Role-based permissions**: Patient (full), Caregiver (read + log on behalf)
-- **Secure storage**: Sensitive tokens in Expo SecureStore
+### Data Flow (Optimistic Updates)
+1. User logs medication intake → Update Zustand store (instant UI update)
+2. Call Firestore service → Write to Firestore (background)
+3. Firestore writes to local cache first (instant success)
+4. Service Worker syncs to server when online (automatic)
+5. If offline → Firestore queues write, syncs when back online
+
+### Conflict Resolution
+- **Strategy**: Last-Write-Wins (LWW) for MVP (Firestore default behavior)
+- **Edge Case**: Same medication logged simultaneously on 2 devices offline
+- **Handling**: Later write wins when both devices come online
+- **Mitigation**: Show sync status in UI, allow manual correction
+- **Future**: Implement CRDT or operational transforms in Phase 2+
+
+### Cache Invalidation
+- **Service Worker**: Cache static assets indefinitely, versioned by filename
+- **Firestore**: Cache documents for 24 hours, refresh on next online session
+- **Manual**: "Clear cache" button in settings
+
+---
+
+## Performance Benchmarks
+
+| Metric | Target | Phase 1 Web | Phase 2 Mobile | Measurement Tool |
+|--------|--------|-------------|----------------|------------------|
+| Lighthouse Performance | ≥90 | 90-95 | 85-90 | Lighthouse CI |
+| Lighthouse Accessibility | ≥90 | 92-98 | 90-95 | Lighthouse CI |
+| Lighthouse Best Practices | ≥90 | 90-95 | 85-90 | Lighthouse CI |
+| First Contentful Paint (FCP) | < 1.5s | 0.8-1.2s | 1.0-1.5s | Lighthouse |
+| Largest Contentful Paint (LCP) | < 2.5s | 1.5-2.0s | 1.8-2.2s | Lighthouse |
+| Time to Interactive (TTI) | < 3.0s | 2.0-2.5s | 2.5-3.0s | Lighthouse |
+| Cumulative Layout Shift (CLS) | < 0.1 | 0.02-0.05 | 0.05-0.08 | Lighthouse |
+| Bundle Size (gzipped) | < 200KB | 150-180KB | 200-250KB | webpack-bundle-analyzer |
+| API Response Time (p95) | < 300ms | 150-250ms | 200-300ms | Firebase Console |
+| UI Response Time (p95) | < 300ms | 50-150ms | 100-200ms | Integration tests |
+| PWA Installation Rate | ≥30% | 30-40% | N/A | Firebase Analytics |
 
 ---
 
 ## Risks & Mitigations
 
-| Risk | Impact | Mitigation |
-|------|--------|-----------|
-| iOS notification limit (64) | Reminders may not fire | Schedule rolling 30-day window, refresh weekly |
-| Firebase cost at scale | High bills at 100M users | Optimize queries, consider hybrid approach in Phase 2 |
-| Notification reliability | Users miss medications | Local notifications (primary), FCM (secondary), in-app fallback |
-| Offline sync conflicts | Data loss/inconsistency | LWW for MVP, log all versions, allow manual correction |
-| Performance on low-end devices | Slow UI, bad UX | Optimize renders, lazy load, test on older devices |
-| App store review delays | Delayed launch | Submit early, have contingency for rejection scenarios |
+| Risk | Likelihood | Impact | Web-Specific Mitigation |
+|------|------------|--------|------------------------|
+| Browser notification permission denial | Medium | Medium | Provide in-app alerts as fallback, educate users on benefits, show permission value prop |
+| Safari limited PWA support | High | Low | Still works as web app, Phase 2 native app for iOS users who need full features |
+| Offline sync conflicts | Low | Medium | Last-write-wins for MVP, display conflict warnings, allow manual correction |
+| Firebase quota exceeded | Low | High | Monitor usage in Firebase Console, upgrade to Blaze plan if needed ($25/month) |
+| Service Worker caching issues | Low | Medium | Thorough testing, cache versioning, "Clear cache" button, unregister old SWs |
+| FHIR complexity overhead | Low | Low | Use simplified Firestore documents, full FHIR compliance in future |
+| Browser compatibility issues | Low | Medium | Test on Chrome 90+, Firefox 88+, Safari 14+, Edge 90+, polyfills if needed |
+| Performance on low-end devices | Low | Medium | Code splitting, lazy loading, bundle analysis, test on older laptops/tablets |
+| PWA installation friction | Medium | Low | Clear prompts, show benefits (offline access, faster load), A/B test messaging |
+| Web push unreliability | Medium | Medium | Phase 2 mobile provides guaranteed native notifications for critical users |
 
 ---
 
-## Open Questions for Phase 1
+## Browser Support Matrix
 
-1. ✅ Firestore data model finalized (to be created in data-model.md)
-2. ✅ API contracts defined (to be created in contracts/)
-3. ✅ User flows validated against spec (to be validated in quickstart.md)
-4. ✅ Agent guidance file updated (to be generated via update-agent-context.sh)
+| Browser | Minimum Version | PWA Support | Offline Support | Push Notifications | Install to Home Screen |
+|---------|----------------|-------------|-----------------|-------------------|----------------------|
+| Chrome | 90+ | ✅ Full | ✅ Full | ✅ Full | ✅ Yes |
+| Firefox | 88+ | ✅ Full | ✅ Full | ✅ Full | ⚠️ Android only |
+| Safari | 14+ | ⚠️ Limited | ✅ Full | ⚠️ iOS 16.4+ | ✅ Yes |
+| Edge | 90+ | ✅ Full | ✅ Full | ✅ Full | ✅ Yes |
+| Opera | 76+ | ✅ Full | ✅ Full | ✅ Full | ✅ Yes |
+| Samsung Internet | 14+ | ✅ Full | ✅ Full | ✅ Full | ✅ Yes |
+
+**Legend**:
+- ✅ Full: Complete support
+- ⚠️ Limited: Partial support or requires user action
+- ❌ None: Not supported
+
+---
+
+## Code Reusability Analysis
+
+### 100% Reusable (No Changes for Mobile)
+- FHIR types (`src/types/fhir.ts`)
+- Utility functions (`src/utils/`)
+- i18n translations (`src/i18n/`)
+- Firebase config (`firebase/config.ts`)
+- Firestore security rules (`firebase/firestore.rules`)
+- Firestore indexes (`firebase/firestore.indexes.json`)
+- Cloud Functions (`firebase/functions/`)
+
+### 90-95% Reusable (Minor Adaptations)
+- Firebase services (`src/services/firestore/*`, `src/services/auth/*`)
+  - API compatible, change imports (`firebase@10.x` → `@react-native-firebase/*`)
+- Zustand stores (`src/store/*`)
+  - 100% compatible, Zustand works on React Native
+- Custom hooks (`src/hooks/*`)
+  - 95% compatible, minor tweaks for platform-specific APIs (e.g., `localStorage` → `AsyncStorage`)
+
+### 70-80% Reusable (Platform-Specific Adaptations)
+- Notification service (`src/services/notifications/*`)
+  - Web: Web Push API + FCM
+  - Mobile: Expo Notifications API + FCM
+  - Shared: FCM logic, device token management
+
+### 10-20% Reusable (Concepts Only)
+- React components (`src/components/*`)
+  - Web: Material UI components (`<Button>`, `<TextField>`, `<Modal>`)
+  - Mobile: React Native Paper components (`<Button>`, `<TextInput>`, `<Dialog>`)
+  - Shared: Component structure, props, state logic
+- Routing (`src/pages/*`)
+  - Web: React Router routes
+  - Mobile: React Navigation stacks
+  - Shared: Route structure, navigation logic
+
+### 0% Reusable (Platform-Specific)
+- Service Worker (`public/sw.js`) - Web only, no mobile equivalent
+- PWA manifest (`public/manifest.json`) - Web only
+- Vite config (`vite.config.ts`) - Web only (mobile uses Metro bundler)
+- Playwright E2E tests (`tests/e2e/*.spec.ts`) - Web only (mobile uses Detox)
+
+---
+
+## Next Steps
+
+✅ **Phase 0 Complete** - All technology decisions documented
+⏭️ **Phase 1 Next** - Design data model, contracts, and quickstart scenarios
+
+**Deliverables for Phase 1**:
+1. `data-model.md` - FHIR R4 resource definitions (Firestore schema)
+2. `contracts/firestore-security-rules.md` - Firestore security rules with test cases
+3. `contracts/firestore.indexes.json` - Composite indexes for optimized queries
+4. `quickstart.md` - 5 integration test scenarios (user flows)
+5. `.github/copilot-instructions.md` - Updated with web stack
+
+---
+
+**Version**: 2.0 (Web-First)  
+**Last Updated**: 2025-10-09  
+**Status**: ✅ Complete  
+**Approach**: Web (Phase 1) → Mobile (Phase 2)
 
 **Status**: Research complete. Ready for Phase 1: Design & Contracts.
