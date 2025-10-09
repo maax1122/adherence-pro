@@ -8,7 +8,7 @@ import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import MedicationsPage from './pages/MedicationsPage';
 import FamilyPage from './pages/FamilyPage';
-import PrivateRoute from './components/PrivateRoute';
+import { PrivateRoute } from './components/PrivateRoute';
 
 // Create Material-UI theme
 const theme = createTheme({
