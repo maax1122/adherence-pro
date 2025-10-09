@@ -11,10 +11,14 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    environment: 'jsdom',
+    environment: 'jsdom', // default for React component tests
     setupFiles: ['./tests/setup.ts'],
-    include: ['tests/**/*.test.{ts,tsx}'],
+    include: ['tests/**/*.test.{ts,tsx}', '../tests/**/*.test.{ts,tsx}'],
     exclude: ['node_modules', 'dist'],
+    // Use Node.js environment for contract tests (they use fs APIs)
+    environmentMatchGlobs: [
+      ['../tests/contract/**', 'node'],
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
