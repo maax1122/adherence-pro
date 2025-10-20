@@ -446,32 +446,34 @@ All setup tasks completed on 2025-10-09. Project structure ready at `/Users/maax
 
 ---
 
-### W020: Layout Component
+### W020: ✅ Layout Component (COMPLETE - 2025-10-18)
 **Description**: Create app shell with navigation  
 **File**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/components/Layout.tsx`  
-**Actions**:
-- Material-UI AppBar with app title
-- Navigation drawer with menu items
-- Profile selector dropdown
-- User menu (settings, logout)
-- Offline indicator banner
-- Main content area
+**Status**: ✅ COMPLETED
+
+**Actions Completed**:
+- ✅ Material-UI AppBar with responsive drawer navigation and branded title
+- ✅ Integrated patient selector with Layout context, Firestore refresh, and loading indicators
+- ✅ User avatar menu with logout flow wired to auth service and settings placeholder
+- ✅ Offline and patient error banners using shared `NotificationBanner`
+- ✅ Main content outlet with support for nested protected routes
 
 **Dependencies**: W009, W017  
-**Validation**: Navigation works, logout button functional
+**Validation**: Layout wraps all protected routes, logout returns to `/login`
 
 ---
 
-### W021: DashboardPage
+### W021: ✅ DashboardPage (COMPLETE - 2025-10-18)
 **Description**: Implement main dashboard  
 **File**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/pages/DashboardPage.tsx`  
-**Actions**:
-- Display all patient profiles
-- Adherence summary for selected profile
-- Upcoming medications today
-- Recent medication logs
-- "Add Profile" button
-- "Add Medication" button
+**Status**: ✅ COMPLETED
+
+**Actions Completed**:
+- ✅ Patient profile grid with avatar cards and quick select action
+- ✅ 7-day adherence summary pulling recent logs with linear progress gauge
+- ✅ Upcoming medications list using MedicationRequest schedules (time-of-day parsing)
+- ✅ Recent medication logs + caregiver notes pulled from Firestore administrations
+- ✅ Disabled placeholders for “Add Profile” and “Add Medication” workflows (tooltips indicate upcoming work)
 
 **Key Features**:
 - Profile cards with photos
@@ -480,20 +482,22 @@ All setup tasks completed on 2025-10-09. Project structure ready at `/Users/maax
 - Quick actions
 
 **Dependencies**: W013, W014, W015, W020  
-**Validation**: Dashboard shows correct data for logged-in user
+**Validation**: Dashboard loads medication requests & logs for the selected profile and surfaces adherence insights
 
 ---
 
-### W022: MedicationsPage
+### W022: ✅ MedicationsPage (COMPLETE - 2025-10-18)
 **Description**: Implement medication list and management  
 **File**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/pages/MedicationsPage.tsx`  
-**Actions**:
-- List all medications for selected profile
-- Filter by status (active, PRN, completed)
-- Medication cards with name, dosage, frequency
-- "Add Medication" FAB button
-- Click medication → navigate to detail page
-- Edit and delete actions
+**Status**: ✅ COMPLETED
+
+**Actions Completed**:
+- ✅ Fetches patient medications via Firestore service with refresh + error handling
+- ✅ Status filter toggle (All/Active/PRN/Completed) with empty-state messaging
+- ✅ Medication cards show status chips, dosage, frequency, and priority labels
+- ✅ Quick log dose button calls MedicationAdministration service (active meds only)
+- ✅ Edit/Delete/Mark completed affordances with navigation hooks and confirmations
+- ✅ Floating add medication FAB placeholder with tooltip
 
 **Key Features**:
 - Filterable list
@@ -501,20 +505,21 @@ All setup tasks completed on 2025-10-09. Project structure ready at `/Users/maax
 - Quick log intake button
 
 **Dependencies**: W014, W020  
-**Validation**: Can view, filter, and manage medications
+**Validation**: Medications load for the selected profile and actions update the list
 
 ---
 
-### W023: FamilyPage
+### W023: ✅ FamilyPage (COMPLETE - 2025-10-18)
 **Description**: Implement caregiver management  
 **File**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/src/pages/FamilyPage.tsx`  
-**Actions**:
-- List active caregivers
-- List pending invitations
-- "Invite Caregiver" button
-- View caregiver permissions
-- Revoke access button
-- Accept/reject invitation (for caregivers)
+**Status**: ✅ COMPLETED
+
+**Actions Completed**:
+- ✅ Load family connections for selected profile with refresh + error states
+- ✅ Invitation dialog with email + permission selection (view/log) wired to Firestore
+- ✅ Active caregiver list with permission toggles and revoke access action
+- ✅ Pending invitation list with contextual accept/reject (only enabled when caretaker logged in)
+- ✅ Audit trail for revoked/rejected connections
 
 **Key Features**:
 - Connection status display
@@ -522,7 +527,7 @@ All setup tasks completed on 2025-10-09. Project structure ready at `/Users/maax
 - Invitation workflow
 
 **Dependencies**: W016, W020  
-**Validation**: Can invite caregivers, manage permissions
+**Validation**: Caregiver invites, permission updates, and revocations work for the selected profile
 
 ---
 
@@ -1670,8 +1675,8 @@ code app/family/index.tsx     # T032
 - [ ] W012-W016: All service layers implemented (copied from mobile)
 - [ ] W017: PrivateRoute protects authenticated routes
 - [ ] W018-W019: Auth pages functional (login, register)
-- [ ] W020: Layout component with navigation
-- [ ] W021-W023: Feature pages implemented
+- [x] W020: Layout component with navigation
+- [x] W021-W023: Feature pages implemented
 
 #### Phase 3.4: Integration Tests
 - [ ] W024-W027: All 5 integration test scenarios PASS

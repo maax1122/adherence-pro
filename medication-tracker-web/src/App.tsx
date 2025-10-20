@@ -9,6 +9,7 @@ import DashboardPage from './pages/DashboardPage';
 import MedicationsPage from './pages/MedicationsPage';
 import FamilyPage from './pages/FamilyPage';
 import { PrivateRoute } from './components/PrivateRoute';
+import Layout from './components/Layout';
 
 // Create Material-UI theme
 const theme = createTheme({
@@ -33,6 +34,12 @@ const theme = createTheme({
   },
 });
 
+const LayoutWrapper = ({ children }: { children: React.ReactNode }) => (
+  <PrivateRoute>
+    <Layout>{children}</Layout>
+  </PrivateRoute>
+);
+
 function App() {
   return (
     <ThemeProvider theme={theme}>
@@ -48,25 +55,25 @@ function App() {
             <Route
               path="/dashboard"
               element={
-                <PrivateRoute>
+                <LayoutWrapper>
                   <DashboardPage />
-                </PrivateRoute>
+                </LayoutWrapper>
               }
             />
             <Route
               path="/medications"
               element={
-                <PrivateRoute>
+                <LayoutWrapper>
                   <MedicationsPage />
-                </PrivateRoute>
+                </LayoutWrapper>
               }
             />
             <Route
               path="/family"
               element={
-                <PrivateRoute>
+                <LayoutWrapper>
                   <FamilyPage />
-                </PrivateRoute>
+                </LayoutWrapper>
               }
             />
 
