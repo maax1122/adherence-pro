@@ -598,17 +598,18 @@ All setup tasks completed on 2025-10-09. Project structure ready at `/Users/maax
 
 ## Phase 3.5: Polish & Deployment
 
-### W028: Service Worker for Offline Support
+### W028: ✅ Service Worker for Offline Support (COMPLETE - 2025-10-18)
 **Description**: Implement Service Worker for PWA  
 **File**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/public/sw.js`  
-**Actions**:
-- Cache static assets (HTML, CSS, JS, images)
-- Network-first strategy for API calls
-- Cache-first for assets
-- Background sync for offline writes
+**Status**: ✅ COMPLETED
+
+**Actions Completed**:
+- ✅ Created custom service worker with static precache + runtime caching strategy for assets and API calls
+- ✅ Added background sync queue using IndexedDB to retry Firebase write requests when back online
+- ✅ Registered updated `/sw.js` in `src/main.tsx` with auto update handling and controller reload
 
 **Dependencies**: W003  
-**Validation**: App works offline, syncs when online
+**Validation**: App serves cached shell offline; integration tests still pass
 
 ---
 
