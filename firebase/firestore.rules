@@ -1,9 +1,146 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // TODO: Replace with your production Firestore security rules
-    match /{document=**} {
-      allow read, write: if false;
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isCaregiver(patientId) {
+      return isAuthenticated() && exists(
+        /databases/$(database)/documents/family_connections/$(request.auth.uid + '_' + patientId)
+      ) && get(
+        /databases/$(database)/documents/family_connections/$(request.auth.uid + '_' + patientId)
+      ).data.status == 'accepted';
+    }
+
+    function caregiverConnection(patientId) {
+      return get(
+        /databases/$(database)/documents/family_connections/$(request.auth.uid + '_' + patientId)
+      );
+    }
+
+    function permissionsIncludeCanLog(perms) {
+      return perms is list && perms.size() > 0 && (
+        perms[0] == 'can_log'
+        || (perms.size() > 1 && perms[1] == 'can_log')
+      );
+    }
+
+    function caregiverCanLog(patientId) {
+      let connection = caregiverConnection(patientId);
+      return connection.data.status == 'accepted'
+        && (
+          connection.data.permissionLevel == 'can_log'
+          || (connection.data.permissions != null && permissionsIncludeCanLog(connection.data.permissions))
+        );
+    }
+
+    function withinEditWindow() {
+      return request.time <= resource.data.createdAt + duration.value(24, 'h');
+    }
+
+    function validMedicationRequest() {
+      let data = request.resource.data;
+      return data.resourceType == 'MedicationRequest'
+        && data.status in ['active', 'on-hold', 'cancelled', 'completed', 'entered-in-error', 'stopped', 'draft']
+        && data.intent in ['proposal', 'plan', 'order', 'original-order', 'reflex-order', 'filler-order', 'instance-order', 'option']
+        && data.medicationName is string && data.medicationName.size() > 0
+        && data.dosageInstruction is list && data.dosageInstruction.size() > 0
+        && data.patientId is string
+        && data.userId is string;
+    }
+
+    function validMedicationAdministration() {
+      let data = request.resource.data;
+      return data.resourceType == 'MedicationAdministration'
+        && data.status in ['in-progress', 'not-done', 'on-hold', 'completed', 'entered-in-error', 'stopped', 'unknown']
+        && data.medicationRequestId is string
+        && data.patientId is string
+        && data.userId is string
+        && data.effectiveDateTime is timestamp
+        && (!('performerUserId' in data) || data.performerUserId is string);
+    }
+
+    match /patients/{patientId} {
+      function validPatientData(data) {
+        return data.resourceType == 'Patient'
+          && data.active is bool
+          && data.name is list && data.name.size() > 0
+          && data.userId == request.auth.uid;
+      }
+
+      allow read: if isOwner(resource.data.userId) || isCaregiver(patientId);
+      allow create: if isOwner(request.resource.data.userId)
+        && validPatientData(request.resource.data);
+      allow update: if isOwner(resource.data.userId)
+        && validPatientData(request.resource.data);
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    match /medication_requests/{medicationRequestId} {
+      allow read: if isOwner(resource.data.userId) || isCaregiver(resource.data.patientId);
+      allow create: if isOwner(request.resource.data.userId) && validMedicationRequest();
+      allow update: if isOwner(resource.data.userId) && validMedicationRequest();
+      allow delete: if isOwner(resource.data.userId);
+
+      allow create: if caregiverCanLog(request.resource.data.patientId) && validMedicationRequest();
+      allow update: if caregiverCanLog(request.resource.data.patientId) && validMedicationRequest();
+    }
+
+    match /medication_administrations/{administrationId} {
+      allow read: if isOwner(resource.data.userId) || isCaregiver(resource.data.patientId);
+
+      allow create: if isOwner(request.resource.data.userId)
+        && validMedicationAdministration()
+        && request.resource.data.effectiveDateTime <= request.time
+        && request.resource.data.status in ['completed', 'not-done'];
+
+      allow update: if isOwner(resource.data.userId)
+        && withinEditWindow()
+        && validMedicationAdministration();
+
+      allow create: if caregiverCanLog(request.resource.data.patientId)
+        && validMedicationAdministration()
+        && request.resource.data.effectiveDateTime <= request.time
+        && request.resource.data.performerUserId == request.auth.uid;
+
+      allow update: if caregiverCanLog(resource.data.patientId)
+        && withinEditWindow()
+        && resource.data.performerUserId == request.auth.uid;
+    }
+
+    match /reminder_schedules/{scheduleId} {
+      allow read, write: if isOwner(resource.data.userId);
+      allow create, update: if isOwner(request.resource.data.userId);
+    }
+
+    match /family_connections/{connectionId} {
+      allow read: if isAuthenticated()
+        && (request.auth.uid == resource.data.patientUserId || request.auth.uid == resource.data.caregiverUserId);
+
+      allow create: if isAuthenticated()
+        && request.resource.data.patientUserId == request.auth.uid
+        && request.resource.data.patientUserId != request.resource.data.caregiverUserId
+        && request.resource.data.status == 'pending';
+
+      allow update: if isAuthenticated()
+        && request.auth.uid == resource.data.caregiverUserId
+        && resource.data.status == 'pending'
+        && request.resource.data.status in ['accepted', 'rejected'];
+
+      allow update: if isAuthenticated()
+        && request.auth.uid == resource.data.patientUserId
+        && resource.data.status == 'accepted'
+        && request.resource.data.status == 'revoked';
+    }
+
+    match /system/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if false;
     }
   }
 }

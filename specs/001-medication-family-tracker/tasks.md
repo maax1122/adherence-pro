@@ -598,6 +598,16 @@ All setup tasks completed on 2025-10-09. Project structure ready at `/Users/maax
 
 ## Phase 3.5: Polish & Deployment
 
+### W031: ✅ Fix Firestore Patient Permissions (COMPLETE - 2025-10-20)
+**Description**: Update Firestore rules so authenticated users can read/write their own patient documents  
+**Status**: ✅ COMPLETED
+
+**Actions Completed**:
+- ✅ Replaced placeholder rules with contract rules granting owners/caregivers scoped access
+- ✅ Added composite index (`userId`, `active`, `createdAt`) for patient query
+- ✅ Deployed rules & indexes to Firebase (`firebase deploy --only firestore:rules,indexes`)
+- ✅ Playwright signup flow now shows dashboard without error banner
+
 ### W028: ✅ Service Worker for Offline Support (COMPLETE - 2025-10-18)
 **Description**: Implement Service Worker for PWA  
 **File**: `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/public/sw.js`  
