@@ -53,8 +53,8 @@ import {
   rejectInvitation,
   revokeConnection,
   updatePermissions,
-  type FamilyConnection,
 } from '@/services/firestore/familyConnectionService';
+import type { FamilyConnection } from '@/types/fhir';
 
 type PermissionKey = 'view_only' | 'can_log';
 
@@ -150,7 +150,7 @@ const FamilyPage: React.FC = () => {
       return;
     }
 
-    const permissions = Array.from(new Set(invitePermissions));
+    const permissions = Array.from(new Set<PermissionKey>(invitePermissions));
     if (permissions.length === 0) {
       setError('At least one permission must be selected when inviting a caregiver.');
       return;

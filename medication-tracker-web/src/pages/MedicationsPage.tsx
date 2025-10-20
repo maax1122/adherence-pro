@@ -50,7 +50,7 @@ type MedicationFilter = 'all' | 'active' | 'prn' | 'completed';
 interface StatusStyle {
   label: string;
   color: 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning';
-  icon: React.ReactNode;
+  icon: React.ReactElement;
 }
 
 const FILTER_OPTIONS: Array<{ value: MedicationFilter; label: string }> = [

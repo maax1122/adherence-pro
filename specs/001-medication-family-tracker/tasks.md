@@ -628,17 +628,17 @@ All setup tasks completed on 2025-10-09. Project structure ready at `/Users/maax
 
 ---
 
-### W030: Deploy to Firebase Hosting
+### W030: ✅ Deploy to Firebase Hosting (COMPLETE - 2025-10-18)
 **Description**: Deploy web app to Firebase Hosting  
-**Actions**:
-```bash
-cd /Users/maax/Projects/side/adherence-pro/medication-tracker-web
-npm run build
-firebase deploy --only hosting
-```
+**Status**: ✅ COMPLETED
+
+**Actions Completed**:
+- ✅ Added Firebase hosting config (`firebase.json`, `.firebaserc`) targeting `adherence-pro-282d7`
+- ✅ Built production bundle with `npm run build --prefix medication-tracker-web`
+- ✅ Deployed via `firebase deploy --only hosting`
 
 **Dependencies**: W003, W024-W027 (tests pass)  
-**Validation**: App accessible at https://adherence-pro.web.app
+**Validation**: App live at https://adherence-pro-282d7.web.app
 
 ---
 
