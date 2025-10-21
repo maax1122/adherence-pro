@@ -89,3 +89,63 @@ export async function notifyScheduleReminder(
     },
   });
 }
+
+export async function notifyCaregiverInvitationSent(
+  caregiverEmail: string,
+  patientName?: string
+): Promise<void> {
+  const title = 'Caregiver invitation sent';
+  const body = patientName
+    ? `${patientName} invited ${caregiverEmail}`
+    : `Invitation sent to ${caregiverEmail}`;
+
+  await showLocalNotification(title, {
+    body,
+    icon: '/icons/icon-192.png',
+    tag: `caregiver-invite-${caregiverEmail}`,
+    data: {
+      caregiverEmail,
+      patientName,
+      type: 'caregiver-invite-sent',
+    },
+  });
+}
+
+export async function notifyCaregiverInvitationAccepted(patientName: string): Promise<void> {
+  await showLocalNotification('Caregiver access confirmed', {
+    body: `${patientName} is now connected to your account.`,
+    icon: '/icons/icon-192.png',
+    tag: `caregiver-invite-accepted-${patientName}`,
+    data: {
+      patientName,
+      type: 'caregiver-invite-accepted',
+    },
+  });
+}
+
+export async function notifyCaregiverMissedDose(
+  patientName: string,
+  medicationName: string,
+  scheduledTimeLabel: string
+): Promise<void> {
+  const title = `${patientName} missed a dose`;
+  const body = `${medicationName} scheduled at ${scheduledTimeLabel}`;
+
+  await showLocalNotification(title, {
+    body,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: `caregiver-missed-${patientName}-${medicationName}-${scheduledTimeLabel}`,
+    requireInteraction: true,
+    data: {
+      patientName,
+      medicationName,
+      scheduledTime: scheduledTimeLabel,
+      type: 'caregiver-missed-dose',
+    },
+    actions: [
+      { action: 'view', title: 'View' },
+      { action: 'dismiss', title: 'Dismiss' },
+    ],
+  });
+}

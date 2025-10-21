@@ -9,6 +9,7 @@ import RegisterPage from './pages/RegisterPage';
 import HomePage from './pages/HomePage';
 import MedicationsPage from './pages/MedicationsPage';
 import FamilyPage from './pages/FamilyPage';
+import CaregiverDashboard from './pages/CaregiverDashboard';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import Layout from './components/Layout';
 
@@ -75,6 +76,14 @@ function App() {
                 element={
                   <LayoutWrapper>
                     <FamilyPage />
+                  </LayoutWrapper>
+                }
+              />
+              <Route
+                path="/caregiver"
+                element={
+                  <LayoutWrapper>
+                    <CaregiverDashboard />
                   </LayoutWrapper>
                 }
               />

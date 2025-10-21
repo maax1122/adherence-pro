@@ -21,6 +21,14 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import NotificationBanner from '@/components/NotificationBanner';
+import ReminderNotification from '@/components/notifications/ReminderNotification';
+import {
+  MedicationForm,
+  MedicationFormSubmitPayload,
+  MedicationList,
+  MedicationLogger,
+  type MedicationLoggerStatus,
+} from '@/components/medication';
 import { useProfileContext } from '@/contexts/ProfileContext';
 import {
   createMedicationRequest,
@@ -28,13 +36,14 @@ import {
   getPatientMedicationRequests,
   updateMedicationRequest,
 } from '@/services/firestore/medicationRequestService';
-import { logMedication } from '@/services/firestore/medicationAdministrationService';
+import { createReminderSchedule } from '@/services/reminders/reminderService';
 import type { MedicationRequestDocument } from '@/types/fhir';
 import {
-  MedicationForm,
-  MedicationFormSubmitPayload,
-  MedicationList,
-} from '@/components/medication';
+  getUpcomingReminders,
+  markReminderMissed,
+  snoozeReminder,
+  type UpcomingReminder,
+} from '@/services/reminders/reminderService';
 
 type MedicationFilter = 'all' | 'active' | 'prn' | 'completed';
 
@@ -76,6 +85,17 @@ const MedicationsPage: React.FC = () => {
   const [isCreateDialogOpen, setCreateDialogOpen] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [isLoggerOpen, setLoggerOpen] = useState(false);
+  const [loggerMedication, setLoggerMedication] = useState<MedicationRequestDocument | null>(null);
+  const [loggerReminderContext, setLoggerReminderContext] = useState<
+    { scheduleId: string; instanceId: string } | null
+  >(null);
+  const [loggerDefaultStatus, setLoggerDefaultStatus] =
+    useState<MedicationLoggerStatus>('completed');
+  const [activeReminder, setActiveReminder] = useState<UpcomingReminder | null>(null);
+  const [reminderLoading, setReminderLoading] = useState(false);
+  const [reminderError, setReminderError] = useState<string | null>(null);
+  const [reminderActionLoading, setReminderActionLoading] = useState(false);
 
   const loadMedications = useCallback(async () => {
     if (!activeProfileId) {
@@ -98,9 +118,34 @@ const MedicationsPage: React.FC = () => {
     }
   }, [activeProfileId]);
 
+  const loadReminders = useCallback(async () => {
+    if (!activeProfileId) {
+      setActiveReminder(null);
+      return;
+    }
+
+    setReminderLoading(true);
+    setReminderError(null);
+
+    try {
+      const reminders = await getUpcomingReminders(activeProfileId, 24);
+      setActiveReminder(reminders[0] ?? null);
+    } catch (loadError) {
+      console.error('Failed to load reminders', loadError);
+      setActiveReminder(null);
+      setReminderError('Unable to load reminders right now.');
+    } finally {
+      setReminderLoading(false);
+    }
+  }, [activeProfileId]);
+
   useEffect(() => {
     void loadMedications();
   }, [loadMedications]);
+
+  useEffect(() => {
+    void loadReminders();
+  }, [loadReminders]);
 
   const filteredMedications = useMemo(
     () => filterMedications(medications, filter),
@@ -123,22 +168,11 @@ const MedicationsPage: React.FC = () => {
     });
   };
 
-  const handleLogDose = async (medication: MedicationRequestDocument) => {
-    setActionState(medication.id, true);
-
-    try {
-      await logMedication({
-        medicationRequestId: medication.id,
-        status: 'completed',
-        effectiveDateTime: new Date(),
-      });
-      await loadMedications();
-    } catch (logError) {
-      console.error('Failed to log medication dose', logError);
-      setError('Could not log the medication dose. Please try again.');
-    } finally {
-      setActionState(medication.id, false);
-    }
+  const handleLogDose = (medication: MedicationRequestDocument) => {
+    setLoggerMedication(medication);
+    setLoggerReminderContext(null);
+    setLoggerDefaultStatus('completed');
+    setLoggerOpen(true);
   };
 
   const handleMarkCompleted = async (medication: MedicationRequestDocument) => {
@@ -176,6 +210,96 @@ const MedicationsPage: React.FC = () => {
     }
   };
 
+  const handleLoggerClose = useCallback(() => {
+    setLoggerOpen(false);
+    setLoggerMedication(null);
+    setLoggerReminderContext(null);
+  }, []);
+
+  const handleLoggerSuccess = useCallback(async () => {
+    await loadMedications();
+    await loadReminders();
+  }, [loadMedications, loadReminders]);
+
+  const resolveMedicationForReminder = useCallback(
+    (reminder: UpcomingReminder): MedicationRequestDocument => {
+      const existing = medications.find(
+        (item) => item.id === reminder.schedule.medicationRequestId
+      );
+      if (existing) {
+        return existing;
+      }
+
+      return {
+        resourceType: 'MedicationRequest',
+        id: reminder.schedule.medicationRequestId,
+        userId: reminder.schedule.userId,
+        patientId: reminder.schedule.patientId,
+        medicationName: reminder.schedule.medicationName,
+        status: 'active',
+        intent: 'order',
+        medicationCodeableConcept: { text: reminder.schedule.medicationName },
+        dosageInstruction: reminder.schedule.timing
+          ? [
+              {
+                timing: reminder.schedule.timing,
+              },
+            ]
+          : [],
+      } as MedicationRequestDocument;
+    },
+    [medications]
+  );
+
+  const handleReminderLogTaken = useCallback(
+    (reminder: UpcomingReminder) => {
+      const medication = resolveMedicationForReminder(reminder);
+      setLoggerMedication(medication);
+      setLoggerDefaultStatus('completed');
+      setLoggerReminderContext({
+        scheduleId: reminder.scheduleId,
+        instanceId: reminder.instance.id,
+      });
+      setLoggerOpen(true);
+    },
+    [resolveMedicationForReminder]
+  );
+
+  const handleReminderMarkMissed = useCallback(
+    (reminder: UpcomingReminder) => {
+      const medication = resolveMedicationForReminder(reminder);
+      setLoggerMedication(medication);
+      setLoggerDefaultStatus('not-done');
+      setLoggerReminderContext({
+        scheduleId: reminder.scheduleId,
+        instanceId: reminder.instance.id,
+      });
+      setLoggerOpen(true);
+    },
+    [resolveMedicationForReminder]
+  );
+
+  const handleReminderSnooze = useCallback(
+    async (reminder: UpcomingReminder, minutes: number) => {
+      setReminderActionLoading(true);
+      setReminderError(null);
+      try {
+        await snoozeReminder({
+          scheduleId: reminder.scheduleId,
+          instanceId: reminder.instance.id,
+          minutes,
+        });
+        await loadReminders();
+      } catch (snoozeError) {
+        console.error('Failed to snooze reminder', snoozeError);
+        setReminderError('Unable to snooze reminder. Please try again.');
+      } finally {
+        setReminderActionLoading(false);
+      }
+    },
+    [loadReminders]
+  );
+
   const handleNavigateToDetail = (medication: MedicationRequestDocument) => {
     navigate(`/medications/${medication.id}`);
   };
@@ -184,7 +308,7 @@ const MedicationsPage: React.FC = () => {
     navigate(`/medications/${medication.id}/edit`);
   };
 
-  const disableActions = !activeProfileId || isLoading || isLoadingProfiles;
+  const disableActions = !activeProfileId || isLoading || isLoadingProfiles || isLoggerOpen;
 
   const handleOpenCreateDialog = () => {
     setCreateError(null);
@@ -209,7 +333,7 @@ const MedicationsPage: React.FC = () => {
     setCreateError(null);
 
     try {
-      await createMedicationRequest({
+      const createdMedication = await createMedicationRequest({
         patientId: activeProfileId,
         medicationName: payload.medicationName,
         dosageInstruction: payload.dosageInstruction,
@@ -217,8 +341,25 @@ const MedicationsPage: React.FC = () => {
         priority: payload.priority,
         dispenseRequest: payload.dispenseRequest,
       });
+
+      if (!payload.isPrn) {
+        try {
+          await createReminderSchedule({
+            medicationRequestId: createdMedication.id,
+          });
+        } catch (scheduleError) {
+          console.error('Failed to create reminder schedule', scheduleError);
+          setReminderError(
+            scheduleError instanceof Error
+              ? scheduleError.message
+              : 'Unable to create reminder schedule. You can try again later.'
+          );
+        }
+      }
+
       setCreateDialogOpen(false);
       await loadMedications();
+      await loadReminders();
     } catch (createErr) {
       console.error('Failed to create medication', createErr);
       setCreateError(
@@ -315,6 +456,15 @@ const MedicationsPage: React.FC = () => {
       </NotificationBanner>
 
       <NotificationBanner
+        id="reminder-error"
+        visible={Boolean(reminderError)}
+        severity="warning"
+        icon={<WarningAmberIcon fontSize="inherit" />}
+      >
+        {reminderError}
+      </NotificationBanner>
+
+      <NotificationBanner
         id="medications-no-patient"
         visible={hasNoPatient}
         severity="info"
@@ -327,6 +477,18 @@ const MedicationsPage: React.FC = () => {
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress />
         </Box>
+      )}
+
+      {activeReminder && activeProfileId && !reminderLoading && (
+        <ReminderNotification
+          medicationName={activeReminder.schedule.medicationName}
+          patientName={activeProfile?.name?.[0]?.text}
+          scheduledTime={activeReminder.instance.effectiveDateTime.toDate()}
+          isProcessing={reminderActionLoading}
+          onLogTaken={() => handleReminderLogTaken(activeReminder)}
+          onMarkMissed={() => handleReminderMarkMissed(activeReminder)}
+          onSnooze={(minutes) => handleReminderSnooze(activeReminder, minutes)}
+        />
       )}
 
       {!isLoading && activeProfileId && filteredMedications.length > 0 && (
@@ -387,6 +549,15 @@ const MedicationsPage: React.FC = () => {
           />
         </DialogContent>
       </Dialog>
+
+      <MedicationLogger
+        open={isLoggerOpen}
+        medication={loggerMedication}
+        defaultStatus={loggerDefaultStatus}
+        reminderContext={loggerReminderContext}
+        onClose={handleLoggerClose}
+        onSuccess={handleLoggerSuccess}
+      />
     </Box>
   );
 };

@@ -30,6 +30,7 @@ import {
   Medication as MedicationIcon,
   Menu as MenuIcon,
   Settings as SettingsIcon,
+  Diversity3 as Diversity3Icon,
 } from '@mui/icons-material';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -98,6 +99,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       { label: 'Dashboard', path: '/dashboard', icon: <DashboardIcon /> },
       { label: 'Medications', path: '/medications', icon: <MedicationIcon /> },
       { label: 'Family', path: '/family', icon: <FamilyRestroomIcon /> },
+      { label: 'Caregiver', path: '/caregiver', icon: <Diversity3Icon /> },
     ],
     []
   );

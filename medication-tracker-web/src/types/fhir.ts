@@ -254,10 +254,25 @@ export interface FHIRMedicationAdministration {
 }
 
 // Simplified Firestore document type
+export interface MedicationAdministrationEditHistoryEntry {
+  editedAt: Timestamp;
+  previousStatus: 'taken' | 'missed' | 'taken_late';
+  editedBy: string;
+  editedByName?: string;
+}
+
 export interface MedicationAdministrationDocument extends FHIRMedicationAdministration {
-  userId: string; // Required in Firestore
+  userId: string; // Required in Firestore (patient owner)
   patientId: string; // Required in Firestore
   medicationRequestId: string; // Required in Firestore
+  administrationStatus?: 'taken' | 'missed' | 'taken_late';
+  scheduledTime?: Timestamp | null;
+  actualTime: Timestamp; // When the dose was recorded
+  performedBy: string; // UID of performer (patient or caregiver)
+  performedByRole: 'patient' | 'caregiver';
+  performedByName?: string;
+  isEdited?: boolean;
+  editHistory?: MedicationAdministrationEditHistoryEntry[];
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -329,6 +344,7 @@ export interface FamilyConnection {
   patientUserId: string; // Firebase Auth UID of patient
   caregiverUserId: string; // Firebase Auth UID of caregiver (empty until accepted)
   caregiverEmail: string; // Email address for invitation
+  caregiverEmailLowercase?: string; // Normalised email for lookups
   patientId: string; // FHIR Patient resource ID
   
   // Status lifecycle

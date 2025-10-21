@@ -23,7 +23,7 @@ import {
 import { db } from '@/config/firebase';
 import type { FamilyConnection } from '@/types/fhir';
 import { familyConnectionConverter } from './converters';
-import { getCurrentUserId } from '../auth/authService';
+import { getCurrentUser, getCurrentUserId } from '../auth/authService';
 import { getPatient } from './patientService';
 
 const FAMILY_CONNECTIONS_COLLECTION = 'family_connections';
@@ -58,6 +58,7 @@ export async function createInvitation(
   data: CreateInvitationData
 ): Promise<FamilyConnection> {
   const userId = getCurrentUserId();
+  const currentUser = getCurrentUser();
   if (!userId) {
     throw new Error('User must be authenticated to create invitation');
   }
@@ -79,6 +80,13 @@ export async function createInvitation(
     throw new Error('Invalid email address');
   }
 
+  const trimmedEmail = data.caregiverEmail.trim();
+  const normalizedEmail = trimmedEmail.toLowerCase();
+
+  if (currentUser?.email && currentUser.email.toLowerCase() === normalizedEmail) {
+    throw new Error('You cannot invite yourself as a caregiver');
+  }
+
   // Validate permissions
   if (!data.permissions || data.permissions.length === 0) {
     throw new Error('At least one permission must be specified');
@@ -87,7 +95,7 @@ export async function createInvitation(
   // Check if invitation already exists for this email and patient
   const existingConnection = await getConnectionByPatientAndCaregiverEmail(
     data.patientId,
-    data.caregiverEmail
+    normalizedEmail
   );
 
   if (existingConnection && existingConnection.status === 'pending') {
@@ -104,7 +112,8 @@ export async function createInvitation(
     id: connectionRef.id,
     patientUserId: userId,
     caregiverUserId: '', // Will be filled when invitation is accepted
-    caregiverEmail: data.caregiverEmail,
+    caregiverEmail: trimmedEmail,
+    caregiverEmailLowercase: normalizedEmail,
     patientId: data.patientId,
     status: 'pending',
     permissions: data.permissions,
@@ -127,6 +136,7 @@ export async function createInvitation(
  */
 export async function acceptInvitation(connectionId: string): Promise<FamilyConnection> {
   const userId = getCurrentUserId();
+  const currentUser = getCurrentUser();
   if (!userId) {
     throw new Error('User must be authenticated to accept invitation');
   }
@@ -143,6 +153,15 @@ export async function acceptInvitation(connectionId: string): Promise<FamilyConn
   // Verify invitation status
   if (connection.status !== 'pending') {
     throw new Error(`Invitation cannot be accepted (current status: ${connection.status})`);
+  }
+
+  const userEmail = currentUser?.email?.toLowerCase();
+  if (!userEmail) {
+    throw new Error('User email is required to accept invitations');
+  }
+
+  if (connection.caregiverEmailLowercase !== userEmail) {
+    throw new Error('This invitation is not addressed to the current user');
   }
 
   // Update connection
@@ -164,6 +183,7 @@ export async function acceptInvitation(connectionId: string): Promise<FamilyConn
  */
 export async function rejectInvitation(connectionId: string): Promise<FamilyConnection> {
   const userId = getCurrentUserId();
+  const currentUser = getCurrentUser();
   if (!userId) {
     throw new Error('User must be authenticated to reject invitation');
   }
@@ -180,6 +200,15 @@ export async function rejectInvitation(connectionId: string): Promise<FamilyConn
   // Verify invitation status
   if (connection.status !== 'pending') {
     throw new Error(`Invitation cannot be rejected (current status: ${connection.status})`);
+  }
+
+  const userEmail = currentUser?.email?.toLowerCase();
+  if (!userEmail) {
+    throw new Error('User email is required to reject invitations');
+  }
+
+  if (connection.caregiverEmailLowercase !== userEmail) {
+    throw new Error('This invitation is not addressed to the current user');
   }
 
   // Update connection
@@ -290,14 +319,26 @@ export async function getCaregiverConnections(
  */
 export async function getPendingInvitationsForEmail(email: string): Promise<FamilyConnection[]> {
   const connectionsRef = collection(db, FAMILY_CONNECTIONS_COLLECTION);
+  const normalizedEmail = email.trim().toLowerCase();
   const q = query(
     connectionsRef,
-    where('caregiverEmail', '==', email),
+    where('caregiverEmailLowercase', '==', normalizedEmail),
     where('status', '==', 'pending')
   );
 
   const snapshot = await getDocs(q);
   return snapshot.docs.map((doc) => familyConnectionConverter.fromFirestore(doc));
+}
+
+/**
+ * Get pending invitations for the current authenticated user
+ */
+export async function getPendingInvitationsForCurrentUser(): Promise<FamilyConnection[]> {
+  const currentUser = getCurrentUser();
+  if (!currentUser?.email) {
+    return [];
+  }
+  return getPendingInvitationsForEmail(currentUser.email);
 }
 
 /**
@@ -432,10 +473,11 @@ export async function getConnectionByPatientAndCaregiverEmail(
   caregiverEmail: string
 ): Promise<FamilyConnection | null> {
   const connectionsRef = collection(db, FAMILY_CONNECTIONS_COLLECTION);
+  const normalizedEmail = caregiverEmail.trim().toLowerCase();
   const q = query(
     connectionsRef,
     where('patientId', '==', patientId),
-    where('caregiverEmail', '==', caregiverEmail)
+    where('caregiverEmailLowercase', '==', normalizedEmail)
   );
 
   const snapshot = await getDocs(q);

@@ -21,17 +21,94 @@ import {
   orderBy,
   Timestamp,
 } from 'firebase/firestore';
+import type { User } from 'firebase/auth';
 import { db } from '@/config/firebase';
 import {
   MedicationAdministrationDocument,
+  MedicationAdministrationEditHistoryEntry,
   FHIRCodeableConcept,
 } from '@/types/fhir';
 import { medicationAdministrationConverter } from './converters';
-import { getCurrentUserId } from '../auth/authService';
+import { getCurrentUser, getCurrentUserId } from '../auth/authService';
 import { getMedicationRequest } from './medicationRequestService';
+import { canCaregiverLog, canCaregiverView } from './familyConnectionService';
+import { getPatient } from './patientService';
 
 const MEDICATION_ADMINISTRATIONS_COLLECTION = 'medication_administrations';
 const EDIT_WINDOW_HOURS = 24;
+const LATE_THRESHOLD_MINUTES = 10;
+const MILLISECONDS_IN_MINUTE = 60 * 1000;
+
+const computeAdministrationStatus = (
+  status: LogMedicationData['status'],
+  provided: LogMedicationData['administrationStatus'] | undefined,
+  scheduledTime: Date | null | undefined,
+  actualTime: Date
+): 'taken' | 'missed' | 'taken_late' => {
+  if (provided) {
+    return provided;
+  }
+
+  if (status === 'not-done') {
+    return 'missed';
+  }
+
+  if (status === 'completed') {
+    if (scheduledTime) {
+      const diffMinutes = (actualTime.getTime() - scheduledTime.getTime()) / MILLISECONDS_IN_MINUTE;
+      if (diffMinutes > LATE_THRESHOLD_MINUTES) {
+        return 'taken_late';
+      }
+    }
+    return 'taken';
+  }
+
+  // Default fall-back for other statuses (on-hold, stopped)
+  return status === 'not-done' ? 'missed' : 'taken';
+};
+
+const resolveDisplayName = (
+  explicit: string | undefined,
+  role: 'patient' | 'caregiver',
+  user: User | null
+): string => {
+  const trimmed = explicit?.trim();
+  if (trimmed) {
+    return trimmed;
+  }
+
+  if (user?.displayName) {
+    return user.displayName;
+  }
+
+  if (user?.email) {
+    return user.email;
+  }
+
+  return role === 'patient' ? 'Patient' : 'Caregiver';
+};
+
+const getAdministrationStatusFromLog = (
+  log: MedicationAdministrationDocument
+): 'taken' | 'missed' | 'taken_late' => {
+  if (log.administrationStatus) {
+    return log.administrationStatus;
+  }
+
+  const scheduledDate = log.scheduledTime
+    ? typeof (log.scheduledTime as Timestamp).toDate === 'function'
+      ? (log.scheduledTime as Timestamp).toDate()
+      : null
+    : null;
+  const effectiveDate = (log.effectiveDateTime as Timestamp).toDate();
+
+  return computeAdministrationStatus(
+    log.status as LogMedicationData['status'],
+    undefined,
+    scheduledDate,
+    effectiveDate
+  );
+};
 
 // ============================================================================
 // Types
@@ -42,7 +119,8 @@ export interface LogMedicationData {
   status: 'completed' | 'not-done' | 'on-hold' | 'stopped';
   effectiveDateTime?: Date;
   performerUserId?: string; // For caregiver logging
-  performerRole?: 'patient' | 'caregiver' | 'family_member';
+  performerRole?: 'patient' | 'caregiver';
+  performerDisplayName?: string;
   reasonCode?: string; // Why not-done (e.g., "Forgot", "Side effects")
   note?: string;
   dosage?: {
@@ -53,12 +131,15 @@ export interface LogMedicationData {
     };
   };
   reminderInstanceId?: string;
+  administrationStatus?: 'taken' | 'missed' | 'taken_late';
+  scheduledTime?: Date;
 }
 
 export interface UpdateMedicationAdministrationData {
   status?: 'completed' | 'not-done' | 'on-hold' | 'stopped';
   reasonCode?: string;
   note?: string;
+  administrationStatus?: 'taken' | 'missed' | 'taken_late';
 }
 
 export interface DateRange {
@@ -87,8 +168,13 @@ export async function logMedication(
   data: LogMedicationData
 ): Promise<MedicationAdministrationDocument> {
   const userId = getCurrentUserId();
+  const currentUser = getCurrentUser();
   if (!userId) {
     throw new Error('User must be authenticated to log medication');
+  }
+
+  if (data.performerUserId && data.performerUserId !== userId) {
+    throw new Error('Performer user mismatch for medication log');
   }
 
   // Get medication request to verify ownership and get details
@@ -97,14 +183,19 @@ export async function logMedication(
     throw new Error('MedicationRequest not found');
   }
 
-  // Verify user has permission
   const performerUserId = data.performerUserId || userId;
-  const isOwner = medRequest.userId === performerUserId;
-  
-  if (!isOwner) {
-    // Note: Caregiver permission check would go here
-    // For now, only allow owner to log
-    throw new Error('User does not have permission to log this medication');
+  let performerRole: 'patient' | 'caregiver' =
+    medRequest.userId === performerUserId ? 'patient' : 'caregiver';
+
+  if (performerRole === 'caregiver') {
+    const canLogForPatient = await canCaregiverLog(performerUserId, medRequest.patientId);
+    if (!canLogForPatient) {
+      throw new Error('User does not have permission to log this medication');
+    }
+  }
+
+  if (data.performerRole && data.performerRole !== performerRole) {
+    performerRole = data.performerRole;
   }
 
   // Validate effectiveDateTime <= now
@@ -113,6 +204,14 @@ export async function logMedication(
   if (effectiveDateTime > now) {
     throw new Error('effectiveDateTime cannot be in the future');
   }
+
+  const scheduledDate = data.scheduledTime ?? null;
+  const administrationStatus = computeAdministrationStatus(
+    data.status,
+    data.administrationStatus,
+    scheduledDate,
+    effectiveDateTime
+  );
 
   const adminRef = doc(collection(db, MEDICATION_ADMINISTRATIONS_COLLECTION));
 
@@ -133,6 +232,15 @@ export async function logMedication(
     ];
   }
 
+  const performerDisplayName = resolveDisplayName(
+    data.performerDisplayName,
+    performerRole,
+    currentUser
+  );
+
+  const actualTimestamp = Timestamp.fromDate(effectiveDateTime);
+  const scheduledTimestamp = scheduledDate ? Timestamp.fromDate(scheduledDate) : null;
+
   const medicationAdmin: MedicationAdministrationDocument = {
     resourceType: 'MedicationAdministration',
     id: adminRef.id,
@@ -140,17 +248,21 @@ export async function logMedication(
     patientId: medRequest.patientId,
     medicationRequestId: data.medicationRequestId,
     status: data.status,
+    administrationStatus,
     statusReason: reasonCode,
     subject: {
       reference: `Patient/${medRequest.patientId}`,
     },
     medicationCodeableConcept: medRequest.medicationCodeableConcept,
-    effectiveDateTime: Timestamp.fromDate(effectiveDateTime),
+    effectiveDateTime: actualTimestamp,
     performer: [
       {
         actor: {
           reference: `User/${performerUserId}`,
-          display: data.performerRole || 'patient',
+          display: performerDisplayName,
+        },
+        onBehalfOf: {
+          reference: `Patient/${medRequest.patientId}`,
         },
       },
     ],
@@ -163,6 +275,9 @@ export async function logMedication(
           {
             text: data.note,
             time: new Date().toISOString(),
+            authorReference: {
+              reference: `User/${performerUserId}`,
+            },
           },
         ]
       : undefined,
@@ -172,6 +287,13 @@ export async function logMedication(
       profile: ['http://hl7.org/fhir/StructureDefinition/MedicationAdministration'],
       versionId: '1',
     },
+    scheduledTime: scheduledTimestamp,
+    actualTime: actualTimestamp,
+    performedBy: performerUserId,
+    performedByRole: performerRole,
+    performedByName: performerDisplayName,
+    isEdited: false,
+    editHistory: [],
   };
 
   const firestoreData = medicationAdministrationConverter.toFirestore(medicationAdmin);
@@ -209,11 +331,27 @@ export async function getMedicationLogs(
     throw new Error('User must be authenticated to get medication logs');
   }
 
+  const medRequest = await getMedicationRequest(medicationRequestId);
+  if (!medRequest) {
+    throw new Error('MedicationRequest not found');
+  }
+
+  const ownerUserId = medRequest.userId;
+  const ownsRequest = ownerUserId === userId;
+
+  if (!ownsRequest) {
+    const canView = await canCaregiverView(userId, medRequest.patientId);
+    if (!canView) {
+      throw new Error('User does not have permission to view this medication history');
+    }
+  }
+
   const adminsRef = collection(db, MEDICATION_ADMINISTRATIONS_COLLECTION);
   
   let q = query(
     adminsRef,
-    where('userId', '==', userId),
+    where('userId', '==', ownerUserId),
+    where('patientId', '==', medRequest.patientId),
     where('medicationRequestId', '==', medicationRequestId)
   );
 
@@ -242,11 +380,26 @@ export async function getPatientMedicationLogs(
     throw new Error('User must be authenticated to get medication logs');
   }
 
+  const patient = await getPatient(patientId);
+  if (!patient) {
+    throw new Error('Patient not found');
+  }
+
+  const ownerUserId = patient.userId;
+  const ownsPatient = ownerUserId === userId;
+
+  if (!ownsPatient) {
+    const canView = await canCaregiverView(userId, patientId);
+    if (!canView) {
+      throw new Error('User does not have permission to view this patient');
+    }
+  }
+
   const adminsRef = collection(db, MEDICATION_ADMINISTRATIONS_COLLECTION);
   
   let q = query(
     adminsRef,
-    where('userId', '==', userId),
+    where('userId', '==', ownerUserId),
     where('patientId', '==', patientId)
   );
 
@@ -271,6 +424,7 @@ export async function updateMedicationAdministration(
   updates: UpdateMedicationAdministrationData
 ): Promise<MedicationAdministrationDocument> {
   const userId = getCurrentUserId();
+  const currentUser = getCurrentUser();
   if (!userId) {
     throw new Error('User must be authenticated to update medication administration');
   }
@@ -285,8 +439,18 @@ export async function updateMedicationAdministration(
   const existingAdmin = medicationAdministrationConverter.fromFirestore(snapshot);
 
   // Verify ownership
-  if (existingAdmin.userId !== userId) {
-    throw new Error('User does not have permission to update this medication administration');
+  const isOwner = existingAdmin.userId === userId;
+  const isPerformer = existingAdmin.performedBy === userId;
+
+  if (!isOwner) {
+    if (!isPerformer) {
+      throw new Error('User does not have permission to update this medication administration');
+    }
+
+    const canLogForPatient = await canCaregiverLog(userId, existingAdmin.patientId);
+    if (!canLogForPatient) {
+      throw new Error('User does not have permission to update this medication administration');
+    }
   }
 
   // Enforce 24-hour edit window
@@ -307,23 +471,44 @@ export async function updateMedicationAdministration(
     ...existingAdmin,
   };
 
+  let hasMeaningfulChange = false;
+  const scheduledDate = existingAdmin.scheduledTime
+    ? existingAdmin.scheduledTime.toDate()
+    : undefined;
+  const previousStatus = existingAdmin.administrationStatus
+    ? existingAdmin.administrationStatus
+    : computeAdministrationStatus(
+        existingAdmin.status as LogMedicationData['status'],
+        undefined,
+        scheduledDate ?? null,
+        (existingAdmin.effectiveDateTime as Timestamp).toDate()
+      );
+
   if (updates.status !== undefined) {
-    updateData.status = updates.status;
+    if (updates.status !== existingAdmin.status) {
+      hasMeaningfulChange = true;
+      updateData.status = updates.status;
+    }
   }
 
   if (updates.reasonCode !== undefined) {
-    updateData.statusReason = [
-      {
-        text: updates.reasonCode,
-        coding: [
-          {
-            system: 'http://adherence-pro.app/CodeSystem/not-done-reason',
-            code: updates.reasonCode.toLowerCase().replace(/\s+/g, '-'),
-            display: updates.reasonCode,
-          },
-        ],
-      },
-    ];
+    hasMeaningfulChange = true;
+    if (updates.reasonCode) {
+      updateData.statusReason = [
+        {
+          text: updates.reasonCode,
+          coding: [
+            {
+              system: 'http://adherence-pro.app/CodeSystem/not-done-reason',
+              code: updates.reasonCode.toLowerCase().replace(/\s+/g, '-'),
+              display: updates.reasonCode,
+            },
+          ],
+        },
+      ];
+    } else {
+      updateData.statusReason = undefined;
+    }
   }
 
   if (updates.note !== undefined) {
@@ -333,14 +518,45 @@ export async function updateMedicationAdministration(
       {
         text: updates.note,
         time: new Date().toISOString(),
+        authorReference: {
+          reference: `User/${userId}`,
+        },
       },
     ];
+    hasMeaningfulChange = true;
+  }
+
+  if (updates.administrationStatus !== undefined) {
+    if (updates.administrationStatus !== existingAdmin.administrationStatus) {
+      updateData.administrationStatus = updates.administrationStatus;
+      hasMeaningfulChange = true;
+    }
+  } else if (updates.status !== undefined) {
+    updateData.administrationStatus = computeAdministrationStatus(
+      updates.status,
+      undefined,
+      scheduledDate ?? null,
+      (existingAdmin.effectiveDateTime as Timestamp).toDate()
+    );
   }
 
   // Increment version
   if (updateData.meta?.versionId) {
     const currentVersion = parseInt(updateData.meta.versionId, 10);
     updateData.meta.versionId = (currentVersion + 1).toString();
+  }
+
+  if (hasMeaningfulChange) {
+    updateData.isEdited = true;
+    const historyEntry: MedicationAdministrationEditHistoryEntry = {
+      editedAt: Timestamp.now(),
+      previousStatus,
+      editedBy: userId,
+      editedByName: resolveDisplayName(undefined, isOwner ? 'patient' : 'caregiver', currentUser),
+    };
+
+    const existingHistory = existingAdmin.editHistory || [];
+    updateData.editHistory = [...existingHistory, historyEntry];
   }
 
   const firestoreData = medicationAdministrationConverter.toFirestore(
@@ -361,8 +577,11 @@ export async function calculateAdherence(
 ): Promise<AdherenceStats> {
   const logs = await getMedicationLogs(medicationRequestId, dateRange);
 
-  const totalTaken = logs.filter((log) => log.status === 'completed').length;
-  const totalMissed = logs.filter((log) => log.status === 'not-done').length;
+  const totalTaken = logs.filter((log) => {
+    const status = getAdministrationStatusFromLog(log);
+    return status === 'taken' || status === 'taken_late';
+  }).length;
+  const totalMissed = logs.filter((log) => getAdministrationStatusFromLog(log) === 'missed').length;
   const totalScheduled = totalTaken + totalMissed;
 
   const adherenceRate = totalScheduled > 0 ? (totalTaken / totalScheduled) * 100 : 0;
@@ -383,7 +602,7 @@ export async function getMissedDoses(
   dateRange?: DateRange
 ): Promise<MedicationAdministrationDocument[]> {
   const logs = await getMedicationLogs(medicationRequestId, dateRange);
-  return logs.filter((log) => log.status === 'not-done');
+  return logs.filter((log) => getAdministrationStatusFromLog(log) === 'missed');
 }
 
 /**
@@ -399,7 +618,19 @@ export async function isMedicationAdministrationOwnedByUser(
   }
 
   const admin = await getMedicationAdministration(adminId);
-  return admin?.userId === targetUserId;
+  if (!admin) {
+    return false;
+  }
+
+  if (admin.userId === targetUserId) {
+    return true;
+  }
+
+  if (admin.performedBy === targetUserId) {
+    return canCaregiverLog(targetUserId, admin.patientId);
+  }
+
+  return false;
 }
 
 /**
@@ -411,10 +642,25 @@ export async function getMedicationLogCount(patientId: string): Promise<number> 
     throw new Error('User must be authenticated to get medication log count');
   }
 
+  const patient = await getPatient(patientId);
+  if (!patient) {
+    throw new Error('Patient not found');
+  }
+
+  const ownerUserId = patient.userId;
+  const ownsPatient = ownerUserId === userId;
+
+  if (!ownsPatient) {
+    const canView = await canCaregiverView(userId, patientId);
+    if (!canView) {
+      throw new Error('User does not have permission to view this patient');
+    }
+  }
+
   const adminsRef = collection(db, MEDICATION_ADMINISTRATIONS_COLLECTION);
   const q = query(
     adminsRef,
-    where('userId', '==', userId),
+    where('userId', '==', ownerUserId),
     where('patientId', '==', patientId)
   );
 

@@ -27,7 +27,6 @@ import {
   ListItemAvatar,
   ListItemText,
   Stack,
-  TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -37,7 +36,6 @@ import {
   Delete as DeleteIcon,
   Email as EmailIcon,
   FamilyRestroom as FamilyRestroomIcon,
-  GroupAdd as GroupAddIcon,
   ManageAccounts as ManageAccountsIcon,
   Pending as PendingIcon,
   Person as PersonIcon,
@@ -52,9 +50,9 @@ import { useProfileContext } from '@/contexts/ProfileContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PatientCard from '@/components/patient/PatientCard';
 import { PatientForm, PatientFormValues } from '@/components/patient/PatientForm';
+import CaregiverInvite from '@/components/family/CaregiverInvite';
 import {
   acceptInvitation,
-  createInvitation,
   getPatientConnections,
   rejectInvitation,
   revokeConnection,
@@ -63,8 +61,6 @@ import {
 import type { FamilyConnection, PatientDocument } from '@/types/fhir';
 
 type PermissionKey = 'view_only' | 'can_log';
-
-const DEFAULT_PERMISSIONS: PermissionKey[] = ['view_only'];
 
 const RELATIONSHIP_VALUES: PatientFormValues['relationship'][] = [
   'self',
@@ -98,10 +94,6 @@ const FamilyPage: React.FC = () => {
   const [isLoadingConnections, setIsLoadingConnections] = useState(false);
   const [connectionsError, setConnectionsError] = useState<string | null>(null);
   const [connections, setConnections] = useState<FamilyConnection[]>([]);
-  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [invitePermissions, setInvitePermissions] = useState<PermissionKey[]>(DEFAULT_PERMISSIONS);
-  const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
   const mapProfileToFormValues = useCallback(
     (profile: PatientDocument): PatientFormValues => {
@@ -278,75 +270,6 @@ const FamilyPage: React.FC = () => {
     () => new Set(activeConnections.map((connection) => connection.id)),
     [activeConnections]
   );
-
-  const toggleInvitePermission = (permission: PermissionKey) => {
-    setInvitePermissions((previous) => {
-      if (previous.includes(permission)) {
-        if (permission === 'view_only') {
-          return previous.includes('can_log') ? ['can_log'] : ['view_only'];
-        }
-        return previous.filter((item) => item !== permission);
-      }
-
-      if (permission === 'can_log' && !previous.includes('view_only')) {
-        return [...previous, permission, 'view_only'];
-      }
-
-      return [...previous, permission];
-    });
-  };
-
-  const handleOpenInviteDialog = () => {
-    setInviteDialogOpen(true);
-  };
-
-  const resetInviteForm = () => {
-    setInviteEmail('');
-    setInvitePermissions(DEFAULT_PERMISSIONS);
-  };
-
-  const handleCloseInviteDialog = () => {
-    if (!inviteSubmitting) {
-      setInviteDialogOpen(false);
-      resetInviteForm();
-    }
-  };
-
-  const handleInviteSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!activeProfileId) {
-      return;
-    }
-
-    const permissions = Array.from(new Set<PermissionKey>(invitePermissions));
-    if (permissions.length === 0) {
-      setConnectionsError('At least one permission must be selected when inviting a caregiver.');
-      return;
-    }
-
-    setInviteSubmitting(true);
-    setConnectionsError(null);
-
-    try {
-      await createInvitation({
-        patientId: activeProfileId,
-        caregiverEmail: inviteEmail.trim(),
-        permissions,
-      });
-      setInviteDialogOpen(false);
-      resetInviteForm();
-      await loadConnections();
-    } catch (inviteError) {
-      console.error('Failed to invite caregiver', inviteError);
-      setConnectionsError(
-        inviteError instanceof Error
-          ? inviteError.message
-          : 'Unable to send invitation. Please verify the email and try again.'
-      );
-    } finally {
-      setInviteSubmitting(false);
-    }
-  };
 
   const setConnectionLoading = (connectionId: string, active: boolean) => {
     setActionLoading((previous) => {
@@ -602,18 +525,16 @@ const FamilyPage: React.FC = () => {
               : 'Select a profile to manage caregiver invitations and permissions.'}
           </Typography>
         </Box>
-        <Tooltip title={activeProfileId ? 'Invite a caregiver' : 'Select a profile first'}>
-          <span>
-            <Button
-              variant="contained"
-              startIcon={<GroupAddIcon />}
-              onClick={handleOpenInviteDialog}
-              disabled={!activeProfileId || isLoadingProfiles}
-            >
-              Invite caregiver
-            </Button>
-          </span>
-        </Tooltip>
+        <CaregiverInvite
+          patientId={activeProfileId}
+          patientName={activeProfile?.name?.[0]?.text}
+          disabled={isLoadingProfiles}
+          onInvitationSent={async () => {
+            await loadConnections();
+            setConnectionsError(null);
+          }}
+          onError={setConnectionsError}
+        />
       </Box>
 
       <NotificationBanner
@@ -943,61 +864,6 @@ const FamilyPage: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={inviteDialogOpen} onClose={handleCloseInviteDialog} fullWidth maxWidth="sm">
-        <form onSubmit={handleInviteSubmit}>
-          <DialogTitle>Invite caregiver</DialogTitle>
-          <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 3 }}>
-            <TextField
-              autoFocus
-              label="Caregiver email"
-              type="email"
-              fullWidth
-              value={inviteEmail}
-              required
-              onChange={(event) => setInviteEmail(event.target.value)}
-              placeholder="caregiver@example.com"
-            />
-            <FormControl component="fieldset" variant="standard">
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Permissions
-              </Typography>
-              <FormGroup>
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={invitePermissions.includes('view_only')}
-                      onChange={() => toggleInvitePermission('view_only')}
-                    />
-                  }
-                  label="View medication history"
-                />
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={invitePermissions.includes('can_log')}
-                      onChange={() => toggleInvitePermission('can_log')}
-                    />
-                  }
-                  label="Log medications on behalf of patient"
-                />
-              </FormGroup>
-            </FormControl>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseInviteDialog} disabled={inviteSubmitting}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="contained"
-              startIcon={<EmailIcon />}
-              disabled={inviteSubmitting}
-            >
-              {inviteSubmitting ? <CircularProgress size={16} /> : 'Send invitation'}
-            </Button>
-          </DialogActions>
-        </form>
-      </Dialog>
     </Box>
   );
 };
