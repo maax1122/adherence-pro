@@ -22,18 +22,21 @@
 import { useState, FormEvent } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import {
+  Alert,
   Box,
-  Container,
-  TextField,
   Button,
-  Typography,
+  CircularProgress,
+  Container,
+  Divider,
+  LinearProgress,
   Link,
   Paper,
-  Alert,
-  CircularProgress,
-  LinearProgress,
+  Stack,
+  TextField,
+  Typography,
 } from '@mui/material';
-import { signUp, getAuthErrorMessage } from '@/services/auth/authService';
+import GoogleIcon from '@mui/icons-material/Google';
+import { signUp, getAuthErrorMessage, signInWithGoogle } from '@/services/auth/authService';
 
 // ============================================================================
 // Types
@@ -59,6 +62,7 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState(false);
 
   // Form validation state
   const [displayNameError, setDisplayNameError] = useState('');
@@ -214,6 +218,27 @@ export default function RegisterPage() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    if (socialLoading) {
+      return;
+    }
+    setError('');
+    setSocialLoading(true);
+
+    try {
+      const result = await signInWithGoogle();
+      if (result.error) {
+        setError(getAuthErrorMessage(result.error));
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
+    } catch (_err) {
+      setError('Unable to continue with Google. Please try again.');
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
   return (
     <Container component="main" maxWidth="xs">
       <Box
@@ -249,6 +274,21 @@ export default function RegisterPage() {
             </Alert>
           )}
 
+          <Stack spacing={2} sx={{ width: '100%', mt: 1 }}>
+            <Button
+              fullWidth
+              variant="outlined"
+              startIcon={
+                socialLoading ? <CircularProgress size={18} color="inherit" /> : <GoogleIcon />
+              }
+              onClick={handleGoogleSignIn}
+              disabled={loading || socialLoading}
+            >
+              {socialLoading ? 'Connecting to Google...' : 'Continue with Google'}
+            </Button>
+            <Divider>or</Divider>
+          </Stack>
+
           {/* Registration Form */}
           <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1, width: '100%' }}>
             <TextField
@@ -268,7 +308,7 @@ export default function RegisterPage() {
               onBlur={() => validateDisplayName(displayName)}
               error={!!displayNameError}
               helperText={displayNameError}
-              disabled={loading}
+              disabled={loading || socialLoading}
             />
             <TextField
               margin="normal"
@@ -286,7 +326,7 @@ export default function RegisterPage() {
               onBlur={() => validateEmail(email)}
               error={!!emailError}
               helperText={emailError}
-              disabled={loading}
+              disabled={loading || socialLoading}
             />
             <TextField
               margin="normal"
@@ -306,7 +346,7 @@ export default function RegisterPage() {
               onBlur={() => validatePassword(password)}
               error={!!passwordError}
               helperText={passwordError}
-              disabled={loading}
+              disabled={loading || socialLoading}
             />
 
             {/* Password Strength Indicator */}
@@ -346,7 +386,7 @@ export default function RegisterPage() {
               onBlur={() => validateConfirmPassword(confirmPassword)}
               error={!!confirmPasswordError}
               helperText={confirmPasswordError}
-              disabled={loading}
+              disabled={loading || socialLoading}
             />
 
             {/* Submit Button */}
@@ -355,7 +395,7 @@ export default function RegisterPage() {
               fullWidth
               variant="contained"
               sx={{ mt: 3, mb: 2 }}
-              disabled={loading}
+              disabled={loading || socialLoading}
             >
               {loading ? (
                 <>

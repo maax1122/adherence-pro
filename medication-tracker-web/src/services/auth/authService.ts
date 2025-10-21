@@ -23,6 +23,8 @@ import {
   onAuthStateChanged as firebaseOnAuthStateChanged,
   User,
   AuthError,
+  GoogleAuthProvider,
+  signInWithPopup,
 } from 'firebase/auth';
 import { auth } from '@/config/firebase';
 
@@ -52,6 +54,11 @@ export interface AuthErrorResult {
 }
 
 export type AuthResponse = AuthResult | AuthErrorResult;
+
+const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: 'select_account',
+});
 
 // ============================================================================
 // Auth Service
@@ -121,6 +128,20 @@ export async function signIn(data: SignInData): Promise<AuthResponse> {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
     return { user: userCredential.user };
+  } catch (error) {
+    return { error: error as AuthError };
+  }
+}
+
+/**
+ * Sign in using Google provider
+ *
+ * @returns Promise with user object or error
+ */
+export async function signInWithGoogle(): Promise<AuthResponse> {
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    return { user: result.user };
   } catch (error) {
     return { error: error as AuthError };
   }
@@ -243,6 +264,14 @@ export function getAuthErrorMessage(error: AuthError): string {
       return 'This operation is not allowed. Please contact support.';
     case 'auth/invalid-credential':
       return 'Invalid credentials. Please try again.';
+    case 'auth/popup-closed-by-user':
+      return 'Google sign-in was closed before completing. Please try again.';
+    case 'auth/cancelled-popup-request':
+      return 'Another sign-in attempt is already in progress.';
+    case 'auth/popup-blocked':
+      return 'Your browser blocked the sign-in popup. Please allow popups or try again.';
+    case 'auth/account-exists-with-different-credential':
+      return 'An account already exists with a different credential. Please sign in using your original provider.';
     default:
       return error.message || 'An authentication error occurred.';
   }

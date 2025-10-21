@@ -54,6 +54,23 @@ const hoistedMocks = vi.hoisted(() => {
 
   const sendPasswordResetEmail = vi.fn(async () => {});
 
+  const signInWithPopup = vi.fn(async (_auth: any, _provider: any) => {
+    const user =
+      authStub.currentUser ??
+      ({
+        uid: 'user-123',
+        email: 'john@example.com',
+        displayName: 'John Doe',
+        providerId: 'google.com',
+      } as const);
+    notifyAuthListeners(user);
+    return { user };
+  });
+
+  class MockGoogleAuthProvider {
+    setCustomParameters = vi.fn();
+  }
+
   class MockAuthError extends Error {
     code: string;
 
@@ -78,11 +95,67 @@ const hoistedMocks = vi.hoisted(() => {
   const mockMedications: MedicationRequestDocument[] = [];
   const mockLogs: MedicationAdministrationDocument[] = [];
 
+  const createPatientMock = vi.fn(
+    async (data: {
+      name: string;
+      birthDate?: string;
+      gender?: PatientDocument['gender'];
+      relationship?: PatientDocument['relationship'];
+    }) => {
+      const patient: PatientDocument = {
+        resourceType: 'Patient',
+        id: `patient-${mockPatients.length + 1}`,
+        userId: 'user-123',
+        active: true,
+        name: [
+          {
+            text: data.name,
+            given: data.name.split(' '),
+          },
+        ],
+        birthDate: data.birthDate,
+        gender: data.gender,
+        relationship: data.relationship ?? 'self',
+      };
+      mockPatients.unshift(patient);
+      return patient;
+    }
+  );
+
   const getUserPatientsMock = vi.fn(async () => [...mockPatients]);
 
   const getPatientMedicationRequestsMock = vi.fn(
     async (patientId: string) =>
       mockMedications.filter((medication) => medication.patientId === patientId)
+  );
+
+  const createMedicationRequestMock = vi.fn(
+    async (data: {
+      patientId: string;
+      medicationName: string;
+      dosageInstruction?: MedicationRequestDocument['dosageInstruction'];
+      isPRN?: boolean;
+      priority?: MedicationRequestDocument['priority'];
+      dispenseRequest?: MedicationRequestDocument['dispenseRequest'];
+    }) => {
+      const medication: MedicationRequestDocument = {
+        resourceType: 'MedicationRequest',
+        id: `med-${mockMedications.length + 1}`,
+        userId: 'user-123',
+        patientId: data.patientId,
+        medicationName: data.medicationName,
+        status: 'active',
+        intent: 'order',
+        priority: data.priority,
+        dosageInstruction: data.dosageInstruction ?? [],
+        isPRN: data.isPRN ?? false,
+        medicationCodeableConcept: { text: data.medicationName },
+        subject: { reference: `Patient/${data.patientId}` },
+        dispenseRequest: data.dispenseRequest,
+      };
+      mockMedications.unshift(medication);
+      return medication;
+    }
   );
 
   const updateMedicationRequestMock = vi.fn(
@@ -141,13 +214,17 @@ const hoistedMocks = vi.hoisted(() => {
     signInWithEmailAndPassword,
     signOut,
     sendPasswordResetEmail,
+    signInWithPopup,
+    GoogleAuthProvider: MockGoogleAuthProvider,
     onAuthStateChangedMock,
     MockAuthError,
     mockPatients,
     mockMedications,
     mockLogs,
     getUserPatientsMock,
+    createPatientMock,
     getPatientMedicationRequestsMock,
+    createMedicationRequestMock,
     updateMedicationRequestMock,
     deleteMedicationRequestMock,
     logMedicationMock,
@@ -163,6 +240,8 @@ export const updateProfile = hoistedMocks.updateProfile;
 export const signInWithEmailAndPassword = hoistedMocks.signInWithEmailAndPassword;
 export const signOut = hoistedMocks.signOut;
 export const sendPasswordResetEmail = hoistedMocks.sendPasswordResetEmail;
+export const signInWithPopup = hoistedMocks.signInWithPopup;
+export const GoogleAuthProvider = hoistedMocks.GoogleAuthProvider;
 export const onAuthStateChangedMock = hoistedMocks.onAuthStateChangedMock;
 export const MockAuthError = hoistedMocks.MockAuthError;
 export const mockPatients = hoistedMocks.mockPatients;
@@ -174,6 +253,8 @@ export const updateMedicationRequestMock = hoistedMocks.updateMedicationRequestM
 export const deleteMedicationRequestMock = hoistedMocks.deleteMedicationRequestMock;
 export const logMedicationMock = hoistedMocks.logMedicationMock;
 export const getPatientMedicationLogsMock = hoistedMocks.getPatientMedicationLogsMock;
+export const createPatientMock = hoistedMocks.createPatientMock;
+export const createMedicationRequestMock = hoistedMocks.createMedicationRequestMock;
 
 vi.mock('@/config/firebase', () => ({
   app: {},
@@ -190,6 +271,8 @@ vi.mock('firebase/auth', () => {
     signOut,
     sendPasswordResetEmail,
     updateProfile,
+    signInWithPopup,
+    GoogleAuthProvider,
     MockAuthError,
   } = hoistedMocks;
 
@@ -200,6 +283,8 @@ vi.mock('firebase/auth', () => {
     signOut,
     sendPasswordResetEmail,
     updateProfile,
+    signInWithPopup,
+    GoogleAuthProvider,
     AuthError: MockAuthError,
   };
 });
@@ -208,6 +293,7 @@ let mockedGetPatient: ((id: string) => PatientDocument | null) | null = null;
 
 vi.mock('@/services/firestore/patientService', () => ({
   getUserPatients: hoistedMocks.getUserPatientsMock,
+  createPatient: hoistedMocks.createPatientMock,
   getPatient: async (id: string) => {
     if (mockedGetPatient) {
       return mockedGetPatient(id);
@@ -220,6 +306,7 @@ vi.mock('@/services/firestore/patientService', () => ({
 
 vi.mock('@/services/firestore/medicationRequestService', () => ({
   getPatientMedicationRequests: hoistedMocks.getPatientMedicationRequestsMock,
+  createMedicationRequest: hoistedMocks.createMedicationRequestMock,
   updateMedicationRequest: hoistedMocks.updateMedicationRequestMock,
   deleteMedicationRequest: hoistedMocks.deleteMedicationRequestMock,
 }));
@@ -242,6 +329,9 @@ export const resetTestState = () => {
   signInWithEmailAndPassword.mockClear();
   signOut.mockClear();
   sendPasswordResetEmail.mockClear();
+  signInWithPopup.mockClear();
+  createPatientMock.mockClear();
+  createMedicationRequestMock.mockClear();
 
   getUserPatientsMock.mockClear();
   getPatientMedicationRequestsMock.mockClear();

@@ -21,17 +21,20 @@
 import { useState, FormEvent } from 'react';
 import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import {
+  Alert,
   Box,
-  Container,
-  TextField,
   Button,
-  Typography,
+  CircularProgress,
+  Container,
+  Divider,
   Link,
   Paper,
-  Alert,
-  CircularProgress,
+  Stack,
+  TextField,
+  Typography,
 } from '@mui/material';
-import { signIn, getAuthErrorMessage } from '@/services/auth/authService';
+import GoogleIcon from '@mui/icons-material/Google';
+import { signIn, getAuthErrorMessage, signInWithGoogle } from '@/services/auth/authService';
 
 // ============================================================================
 // Component
@@ -49,6 +52,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState(false);
 
   // Form validation state
   const [emailError, setEmailError] = useState('');
@@ -116,6 +120,27 @@ export default function LoginPage() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    if (socialLoading) {
+      return;
+    }
+    setError('');
+    setSocialLoading(true);
+
+    try {
+      const result = await signInWithGoogle();
+      if (result.error) {
+        setError(getAuthErrorMessage(result.error));
+      } else {
+        navigate(from, { replace: true });
+      }
+    } catch (_err) {
+      setError('Unable to sign in with Google. Please try again.');
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
   /**
    * Handle forgot password
    */
@@ -160,6 +185,22 @@ export default function LoginPage() {
             </Alert>
           )}
 
+          <Stack spacing={2} sx={{ width: '100%', mt: 1 }}>
+            <Button
+              fullWidth
+              variant="outlined"
+              startIcon={
+                socialLoading ? <CircularProgress size={18} color="inherit" /> : <GoogleIcon />
+              }
+              onClick={handleGoogleSignIn}
+              disabled={loading || socialLoading}
+            >
+              {socialLoading ? 'Signing in with Google...' : 'Continue with Google'}
+            </Button>
+
+            <Divider>or</Divider>
+          </Stack>
+
           {/* Login Form */}
           <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1, width: '100%' }}>
             <TextField
@@ -179,7 +220,7 @@ export default function LoginPage() {
               onBlur={() => validateEmail(email)}
               error={!!emailError}
               helperText={emailError}
-              disabled={loading}
+              disabled={loading || socialLoading}
             />
             <TextField
               margin="normal"
@@ -198,7 +239,7 @@ export default function LoginPage() {
               onBlur={() => validatePassword(password)}
               error={!!passwordError}
               helperText={passwordError}
-              disabled={loading}
+              disabled={loading || socialLoading}
             />
 
             {/* Submit Button */}
@@ -207,7 +248,7 @@ export default function LoginPage() {
               fullWidth
               variant="contained"
               sx={{ mt: 3, mb: 2 }}
-              disabled={loading}
+              disabled={loading || socialLoading}
             >
               {loading ? (
                 <>

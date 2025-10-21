@@ -1,9 +1,9 @@
 # Tasks: Medication Family Tracker (Web-First)
 
-**Input**: Design documents from `/Users/maax/Projects/side/adherence-pro/specs/001-medication-family-tracker/`
+**Input**: Design documents from `/Users/maax/Projects/test/adherence-pro/specs/001-medication-family-tracker/`
 **Prerequisites**: plan.md ✅, research.md ✅, data-model.md ✅, contracts/ ✅, quickstart.md ✅
 
-**Last Updated**: 2025-10-09 - Updated for web-first implementation
+**Last Updated**: 2025-10-20 - Reorganized by user stories from spec.md
 
 ## Execution Flow
 ```
@@ -12,9 +12,10 @@
 3. ✅ Loaded contracts/: firestore-security-rules.md, firestore.indexes.json, 4 contract test files
 4. ✅ Loaded quickstart.md: 5 integration test scenarios (web-focused)
 5. ✅ Loaded research.md: React + Vite, Firebase, Web Push API, Service Worker, LWW conflict resolution
-6. Generated 40 tasks for web implementation in TDD order
-7. Marked [P] for parallel execution (independent files)
-8. Web Phase 3.1 (Setup) completed, Mobile Phase (Paused)
+6. ✅ Loaded spec.md: 5 primary user stories with priorities, 52 functional requirements
+7. Generated tasks organized by user story priority (P1-P5) for independent implementation
+8. Marked [P] for parallel execution (independent files)
+9. Web Phase 3.1 (Setup) completed, ready for user story implementation
 ```
 
 ## Project Status Overview
@@ -29,75 +30,367 @@
 - quickstart.md (5 web integration scenarios)
 - .github/copilot-instructions.md updated
 
-### 🔄 Phase 2: Mobile App (PAUSED - Will Resume After Web MVP)
-- Mobile tasks T001-T035 documented but on hold
-- 70-90% code reusability planned from web implementation
-
-### ✅ Phase 3.1: Web Project Setup (COMPLETE - 2025-10-09)
+### ✅ Phase 2: Foundation Setup (COMPLETE - 2025-10-09)
 - Web project structure created at /medication-tracker-web/
 - All configuration files in place
-- Dependencies specified (not yet installed)
-- Ready for implementation
+- Core services implemented (Auth, Patient, MedicationRequest)
+- Dependencies installed and validated
 
-### ⏳ Phase 3.2-3.5: Web Implementation (IN PROGRESS)
-- Current focus: Install dependencies and implement core features
+### ⏳ Phase 3: User Story Implementation (IN PROGRESS)
+- **Priority P1 (MVP Core)**: Basic medication tracking for single user
+- **Priority P2**: Family profile management
+- **Priority P3**: Caregiver monitoring and notifications
+- **Priority P4**: Advanced analytics and reporting
+- **Priority P5**: PWA features and offline support
 
-## Format: `[ID] [P?] Description`
+## Format: `[ID] [P?] [Story] Description`
 - **[P]**: Can run in parallel (different files, no dependencies)
+- **[Story]**: User story reference (US1=P1, US2=P2, etc.)
 - **WEB**: Web implementation task (medication-tracker-web/)
-- **MOBILE**: Mobile implementation task (medication-tracker-app/) - PAUSED
 
 ---
 
-# WEB IMPLEMENTATION TASKS (Current Focus)
+# USER STORY IMPLEMENTATION TASKS (Organized by Priority)
 
-## Phase 3.1: Web Project Setup ✅ COMPLETE
+## Phase 2: Foundation Setup ✅ COMPLETE
 
-All setup tasks completed on 2025-10-09. Project structure ready at `/Users/maax/Projects/side/adherence-pro/medication-tracker-web/`
+All foundational tasks completed on 2025-10-09. Core infrastructure ready for user story implementation.
 
-### W001: ✅ Create Web Project Structure (COMPLETE - 2025-10-09)
-**Description**: Initialize Vite + React + TypeScript project  
-**Status**: ✅ COMPLETED  
-**Files Created**:
-- package.json with all dependencies
-- vite.config.ts, vitest.config.ts, tsconfig.json
-- index.html, public/manifest.json
-- src/config/firebase.ts, src/App.tsx, src/main.tsx
-- .env.example, .gitignore
-- README.md, SETUP_COMPLETE.md
+### ✅ Foundation Tasks (T001-T014) - COMPLETED
+- T001-T004: Project setup, dependencies, TypeScript, Firebase config
+- T005-T008: Contract tests for all collections (110 tests total)
+- T009-T014: Core services (AuthContext, FHIR types, converters, authService, patientService, medicationRequestService)
 
-**Validation**: ✅ All files created, committed, and pushed to GitHub
+**Checkpoint**: ✅ Foundation complete - user story implementation can now begin in parallel
 
 ---
 
-### W002: ✅ Configure TypeScript Strict Mode (COMPLETE - 2025-10-09)
-**Status**: ✅ COMPLETED  
-**Files Created**:
-- tsconfig.json with strict: true
-- All strict flags enabled
+## Phase 3: User Story 1 - Basic Medication Tracking (Priority: P1) 🎯 MVP CORE
 
-**Validation**: ✅ Configuration complete, ready for type-safe development
+**Goal**: Single user can register, add medications, receive reminders, and log intake
+**From Spec**: "As an elderly patient, I want to receive timely reminders to take my medications and easily confirm when I've taken them"
+**Independent Test**: User can complete full medication cycle: register → add medication → receive reminder → log "taken"
+
+### Tests for User Story 1 (TDD - Write First) ⚠️
+
+- [X] **T015** [P] [US1] Integration test for single user medication flow in `tests/integration/scenario-1-single-profile.test.ts`
+  - **Description**: Implement test from quickstart.md Scenario 1 (registration → profile creation → add medication → schedule → receive reminder)
+  - **Files**: `medication-tracker-web/tests/integration/scenario-1-single-profile.test.ts`
+  - **Dependencies**: Foundation complete
+  - **Validation**: Test fails initially (no UI components), then passes after implementation
+
+### Core Implementation for User Story 1
+
+- [X] **T016** [P] [US1] Authentication pages (Login/Register) in `src/pages/auth/`
+  - **Description**: Create LoginPage.tsx, RegisterPage.tsx with forms, validation, Firebase Auth integration
+  - **Files**: `medication-tracker-web/src/pages/auth/LoginPage.tsx`, `RegisterPage.tsx`
+  - **Dependencies**: T009 (AuthContext), T012 (authService)
+  - **Features**: Email/password auth, Google sign-in, form validation, error handling
+
+- [X] **T017** [P] [US1] Patient profile components in `src/components/patient/`
+  - **Description**: Create PatientForm.tsx, PatientCard.tsx for profile creation and display
+  - **Files**: `medication-tracker-web/src/components/patient/PatientForm.tsx`, `PatientCard.tsx`
+  - **Dependencies**: T013 (patientService), W010 (FHIR types)
+  - **Features**: Name, age, photo upload, medical conditions, FHIR Patient creation
+
+- [X] **T018** [P] [US1] Medication form components in `src/components/medication/`
+  - **Description**: Create MedicationForm.tsx for adding medications with schedule
+  - **Files**: `medication-tracker-web/src/components/medication/MedicationForm.tsx`
+  - **Dependencies**: T014 (medicationRequestService), Material-UI date/time pickers
+  - **Features**: Name, dosage, frequency, intake times, duration, FHIR MedicationRequest creation
+
+- [X] **T019** [US1] Medication list and card components in `src/components/medication/`
+  - **Description**: Create MedicationList.tsx, MedicationCard.tsx for displaying medications
+  - **Files**: `medication-tracker-web/src/components/medication/MedicationList.tsx`, `MedicationCard.tsx`
+  - **Dependencies**: T018 (MedicationForm), T014 (medicationRequestService)
+  - **Features**: List view, card layout, edit/delete actions, status indicators
+
+- [X] **T020** [US1] Home dashboard page in `src/pages/HomePage.tsx`
+  - **Description**: Create main dashboard with medication overview, upcoming reminders
+  - **Files**: `medication-tracker-web/src/pages/HomePage.tsx`
+  - **Dependencies**: T017 (PatientCard), T019 (MedicationList)
+  - **Features**: Quick stats, upcoming medications, recent activity, FAB for actions
+
+- [X] **T021** [US1] React Router setup and protected routes in `src/App.tsx`
+  - **Description**: Configure routing with authentication guards
+  - **Files**: `medication-tracker-web/src/App.tsx`, `src/components/common/ProtectedRoute.tsx`
+  - **Dependencies**: T009 (AuthContext), T016 (auth pages), T020 (HomePage)
+  - **Features**: Route protection, auth redirects, loading states
+
+**Checkpoint**: User Story 1 MVP - Single user can track medications end-to-end
 
 ---
 
-### W003: ✅ Install Dependencies (COMPLETE - 2025-10-09)
-**Description**: Install all web dependencies specified in package.json  
-**Status**: ✅ COMPLETED  
-**Actions Completed**:
-- Updated package.json with latest compatible versions using Context7
-- Ran `npm install` successfully (296 packages installed)
-- Verified node_modules created with all dependencies
+## Phase 4: User Story 2 - Family Profile Management (Priority: P2)
 
-**Dependencies Installed**:
-- Production: react@18.3.1, react-dom@18.3.1, react-router-dom@6.30.1, firebase@10.14.1, zustand@4.5.7, @mui/material@5.18.0, date-fns@4.1.0
-- Development: vite@5.4.20, typescript@5.9.3, vitest@2.1.9, @testing-library/react@16.3.0, @firebase/rules-unit-testing@3.0.4, eslint@8.57.1
+**Goal**: User can manage multiple family member profiles
+**From Spec**: "As a family coordinator, I want to manage medication schedules for multiple family members in one place"
+**Independent Test**: User can create family profiles, switch between them, manage medications for each
 
-**Version Updates from Context7**:
-- React Router: 6.26.0 → 6.30.1
-- Firebase: 10.13.0 → 10.14.1
-- Zustand: 4.5.4 → 4.5.7
-- date-fns: 3.6.0 → 4.1.0
-- Vite: 5.3.4 → 5.4.20
+### Tests for User Story 2
+
+- [ ] **T022** [P] [US2] Integration test for family profile management in `tests/integration/family-profile-management.test.ts`
+  - **Description**: Test creating multiple profiles, switching between them, managing medications per profile
+  - **Dependencies**: T015 passes (US1 complete)
+
+### Implementation for User Story 2
+
+- [ ] **T023** [P] [US2] Profile switcher component in `src/components/family/ProfileSwitcher.tsx`
+  - **Description**: Header dropdown to switch between family member profiles
+  - **Dependencies**: T017 (PatientCard), T013 (patientService)
+  - **Features**: Avatar display, profile list, current profile indicator, "Add Profile" option
+
+- [ ] **T024** [P] [US2] Family management page in `src/pages/FamilyPage.tsx`
+  - **Description**: Page to view all family members, add new profiles, manage existing
+  - **Dependencies**: T023 (ProfileSwitcher), T017 (PatientForm)
+  - **Features**: Family member grid, add/edit/delete profiles, profile photos
+
+- [ ] **T025** [US2] Global profile context in `src/contexts/ProfileContext.tsx`
+  - **Description**: Context to manage current active profile across the app
+  - **Dependencies**: T023 (ProfileSwitcher), T024 (FamilyPage)
+  - **Features**: Current profile state, switch profile function, profile-specific data loading
+
+- [ ] **T026** [US2] Update existing pages for multi-profile support
+  - **Description**: Modify HomePage, medication pages to work with active profile
+  - **Files**: Update T020 (HomePage), T019 (MedicationList), T018 (MedicationForm)
+  - **Dependencies**: T025 (ProfileContext)
+  - **Features**: Profile-filtered data, profile-specific actions
+
+**Checkpoint**: User Story 2 complete - Multi-profile management working
+
+---
+
+## Phase 5: User Story 3 - Caregiver Monitoring (Priority: P3)
+
+**Goal**: Caregivers can monitor patient adherence and receive alerts
+**From Spec**: "As a caregiver, I want to monitor my parent's medication intake remotely and receive alerts when they miss a dose"
+**Independent Test**: Caregiver can invite patient, view their adherence, receive missed dose notifications
+
+### Tests for User Story 3
+
+- [ ] **T027** [P] [US3] Integration test for caregiver monitoring in `tests/integration/caregiver-monitoring.test.ts`
+  - **Description**: Test family connection flow, caregiver notifications, adherence viewing
+  - **Dependencies**: T022 passes (US2 complete)
+
+### Implementation for User Story 3
+
+- [ ] **T028** [P] [US3] Family connection service in `src/services/firestore/familyConnectionService.ts`
+  - **Description**: Create service for managing patient-caregiver relationships
+  - **Files**: `medication-tracker-web/src/services/firestore/familyConnectionService.ts`
+  - **Dependencies**: W011 (converters), FHIR FamilyConnection type
+  - **Features**: Send invites, accept/reject, manage permissions, revoke access
+
+- [ ] **T029** [P] [US3] Medication administration service in `src/services/firestore/medicationAdministrationService.ts`
+  - **Description**: Copy and adapt from mobile for logging medication intake
+  - **Dependencies**: W011 (converters), FHIR MedicationAdministration type
+  - **Features**: Log taken/missed, edit entries, caregiver logging on behalf
+
+- [ ] **T030** [P] [US3] Caregiver invitation components in `src/components/family/CaregiverInvite.tsx`
+  - **Description**: Components for sending and managing caregiver invitations
+  - **Dependencies**: T028 (familyConnectionService)
+  - **Features**: Email invite form, permissions selection, invitation status
+
+- [ ] **T031** [US3] Caregiver dashboard in `src/pages/CaregiverDashboard.tsx`
+  - **Description**: Dashboard showing all monitored patients and their status
+  - **Dependencies**: T028 (familyConnectionService), T029 (medicationAdministrationService)
+  - **Features**: Patient list, adherence overview, recent activity, alerts
+
+- [ ] **T032** [US3] Notification system in `src/services/notifications/notificationService.ts`
+  - **Description**: Service for handling caregiver alerts and notifications
+  - **Dependencies**: T029 (medicationAdministrationService), T028 (familyConnectionService)
+  - **Features**: Missed dose alerts, adherence reports, real-time notifications
+
+**Checkpoint**: User Story 3 complete - Caregiver monitoring functional
+
+---
+
+## Phase 6: User Story 4 - Medication Reminders & Logging (Priority: P3)
+
+**Goal**: Users receive timely reminders and can easily log medication intake
+**From Spec**: Browser notifications for scheduled medications, easy taken/missed logging
+**Independent Test**: User receives notification at scheduled time, can log intake with timestamp
+
+### Tests for User Story 4
+
+- [ ] **T033** [P] [US4] Integration test for medication reminders in `tests/integration/medication-reminders.test.ts`
+  - **Description**: Test reminder scheduling, notification delivery, intake logging
+  - **Dependencies**: T027 passes (US3 complete)
+
+### Implementation for User Story 4
+
+- [ ] **T034** [P] [US4] Reminder scheduling service in `src/services/reminders/reminderService.ts`
+  - **Description**: Service for scheduling and managing medication reminders
+  - **Dependencies**: T014 (medicationRequestService), T029 (medicationAdministrationService)
+  - **Features**: Schedule reminders, calculate next dose, handle recurring schedules
+
+- [ ] **T035** [P] [US4] Web notification service in `src/services/notifications/webNotificationService.ts`
+  - **Description**: Service for browser push notifications
+  - **Dependencies**: T034 (reminderService)
+  - **Features**: Request permission, send notifications, handle click actions
+
+- [ ] **T036** [P] [US4] Medication logging components in `src/components/medication/MedicationLogger.tsx`
+  - **Description**: Quick logging interface for taken/missed medications
+  - **Dependencies**: T029 (medicationAdministrationService), T035 (webNotificationService)
+  - **Features**: Quick actions (taken/missed), time selection, notes, status indicators
+
+- [ ] **T037** [US4] Reminder notification component in `src/components/notifications/ReminderNotification.tsx`
+  - **Description**: In-app notification component for medication reminders
+  - **Dependencies**: T034 (reminderService), T036 (MedicationLogger)
+  - **Features**: Reminder popup, snooze options, direct logging actions
+
+**Checkpoint**: User Story 4 complete - Reminder and logging system working
+
+---
+
+## Phase 7: User Story 5 - Adherence Analytics (Priority: P4)
+
+**Goal**: Users can view adherence analytics and trends
+**From Spec**: "Dashboard with adherence percentage, charts, frequently missed medications"
+**Independent Test**: User with logged medications can view adherence statistics and charts
+
+### Tests for User Story 5
+
+- [ ] **T038** [P] [US5] Integration test for adherence analytics in `tests/integration/adherence-analytics.test.ts`
+  - **Description**: Test adherence calculations, chart rendering, data filtering
+  - **Dependencies**: T033 passes (US4 complete)
+
+### Implementation for User Story 5
+
+- [ ] **T039** [P] [US5] Adherence calculation service in `src/services/analytics/adherenceService.ts`
+  - **Description**: Service for calculating adherence metrics and trends
+  - **Dependencies**: T029 (medicationAdministrationService), T014 (medicationRequestService)
+  - **Features**: Adherence percentage, missed doses, time deviation, trends
+
+- [ ] **T040** [P] [US5] Chart components in `src/components/charts/`
+  - **Description**: Create AdherenceChart.tsx, TrendChart.tsx using Chart.js or Recharts
+  - **Dependencies**: T039 (adherenceService), Chart.js library
+  - **Features**: Line charts, bar charts, responsive design, Material-UI theming
+
+- [ ] **T041** [US5] Analytics dashboard page in `src/pages/AnalyticsPage.tsx`
+  - **Description**: Comprehensive analytics dashboard with charts and metrics
+  - **Dependencies**: T039 (adherenceService), T040 (chart components)
+  - **Features**: Overall stats, weekly/monthly views, problem medications, goal tracking
+
+**Checkpoint**: User Story 5 complete - Analytics and reporting functional
+
+---
+
+## Phase 8: PWA Features & Production (Priority: P5)
+
+**Goal**: Progressive Web App capabilities and production readiness
+**From Spec**: PWA installability, offline support, Service Worker
+**Independent Test**: App can be installed, works offline, syncs when online
+
+### PWA Implementation
+
+- [ ] **T042** [P] [PWA] Service Worker setup in `public/sw.js`
+  - **Description**: Configure Service Worker for offline caching and push notifications
+  - **Dependencies**: All core features complete (T015-T041)
+  - **Features**: Cache strategies, offline page, background sync
+
+- [ ] **T043** [P] [PWA] PWA manifest in `public/manifest.json`
+  - **Description**: Configure PWA manifest for installability
+  - **Dependencies**: T042 (Service Worker)
+  - **Features**: App icons, theme colors, display mode, start URL
+
+- [ ] **T044** [P] [PWA] Offline support service in `src/services/offline/offlineService.ts`
+  - **Description**: Handle offline data storage and sync
+  - **Dependencies**: T042 (Service Worker), IndexedDB setup
+  - **Features**: Local storage, sync queue, conflict resolution
+
+- [ ] **T045** [PWA] Install prompt component in `src/components/pwa/InstallPrompt.tsx`
+  - **Description**: Component to prompt users to install the PWA
+  - **Dependencies**: T043 (PWA manifest)
+  - **Features**: Installation prompt, browser detection, dismissible
+
+### Production Readiness
+
+- [ ] **T046** [P] [PROD] Error boundaries in `src/components/common/ErrorBoundary.tsx`
+  - **Description**: React error boundaries for graceful error handling
+  - **Features**: Error logging, fallback UI, error reporting
+
+- [ ] **T047** [P] [PROD] Loading and skeleton components in `src/components/common/`
+  - **Description**: Loading states and skeleton screens for better UX
+  - **Features**: Skeleton loaders, progress indicators, lazy loading
+
+- [ ] **T048** [P] [PROD] Performance optimization
+  - **Description**: Code splitting, lazy loading, bundle optimization
+  - **Files**: Update routing, component imports, Vite config
+  - **Features**: Route-based code splitting, component lazy loading
+
+- [ ] **T049** [PROD] End-to-end testing with Playwright in `tests/e2e/`
+  - **Description**: Complete user journey tests with Playwright
+  - **Dependencies**: All features implemented
+  - **Features**: Cross-browser testing, mobile viewport testing
+
+- [ ] **T050** [PROD] Production deployment configuration
+  - **Description**: Configure for production deployment (Vercel/Netlify)
+  - **Dependencies**: T042-T049 complete
+  - **Features**: Environment config, build optimization, CI/CD ready
+
+**Final Checkpoint**: ✅ Complete web application ready for production deployment
+
+---
+
+## Parallel Execution Examples
+
+### Setup Phase (Can run in parallel after foundation)
+```bash
+# Start multiple terminal sessions:
+npm run dev                    # Development server
+npm run test:watch            # Test watcher
+npm run lint:watch            # Linting watcher
+```
+
+### User Story Development (Independent teams)
+```bash
+# Team 1: Authentication & Profile (US1)
+# T016, T017 can run in parallel
+
+# Team 2: Medication Management (US1) 
+# T018, T019 can run in parallel
+
+# Team 3: Family Features (US2)
+# T023, T024 can run in parallel after US1
+
+# Team 4: Caregiver Features (US3)
+# T028, T029, T030 can run in parallel after US2
+```
+
+### Testing Strategy
+```bash
+# Contract tests (run first, ensure they fail)
+npm run test:contract
+
+# Integration tests (one per user story)
+npm run test:integration
+
+# E2E tests (final validation)
+npm run test:e2e
+```
+
+---
+
+## Dependencies & Sequencing
+
+### Critical Path (Cannot parallelize)
+1. **Foundation** (T001-T014) → **US1 Tests** (T015) → **US1 Implementation** (T016-T021)
+2. **US1 Complete** → **US2 Tests** (T022) → **US2 Implementation** (T023-T026)
+3. **US2 Complete** → **US3 Tests** (T027) → **US3 Implementation** (T028-T032)
+4. **US3 Complete** → **US4 Tests** (T033) → **US4 Implementation** (T034-T037)
+5. **US4 Complete** → **US5 Tests** (T038) → **US5 Implementation** (T039-T041)
+6. **All Features** → **PWA & Production** (T042-T050)
+
+### Parallelization Opportunities
+- Within each user story: Tests [P] can run in parallel with different implementation tasks [P]
+- Different components within same user story (different files)
+- PWA tasks (T042-T045) can run in parallel
+- Production tasks (T046-T048) can run in parallel
+
+**Total Estimated Tasks**: 50 tasks organized by user story priority
+**MVP Delivery**: Complete User Stories 1-2 (T001-T026) for functional MVP
+**Full Feature Set**: All user stories (T001-T041) for complete feature parity with spec
+**Production Ready**: All tasks (T001-T050) for deployment-ready application
 - TypeScript: 5.5.3 → 5.9.3
 
 **Dependencies**: W001, W002  
@@ -607,6 +900,65 @@ All setup tasks completed on 2025-10-09. Project structure ready at `/Users/maax
 - ✅ Added composite index (`userId`, `active`, `createdAt`) for patient query
 - ✅ Deployed rules & indexes to Firebase (`firebase deploy --only firestore:rules,indexes`)
 - ✅ Playwright signup flow now shows dashboard without error banner
+
+### W032: Medication Creation Flow (Web)
+**Description**: Implement medication creation form and Firestore write path  
+**Status**: ⏳ PENDING
+
+**Gaps Identified**:
+- Scenario 1 requires adding a medication with dosage, frequency, and duration
+- Current UI has disabled "Add Medication" button (no form or service call)
+- No Firestore mutation or validation for new MedicationRequest from web client
+
+**Next Steps**:
+- [ ] Design modal/page for medication creation (supports daily/PRN inputs)
+- [ ] Call `createMedicationRequest` service + refresh medication list on success
+- [ ] Surface validation errors and loading state
+- [ ] Add integration test covering successful creation
+
+**Dependencies**: W022, W031  
+**Validation**: Medication appears in list immediately after creation
+
+---
+
+### W033: Reminder Schedule Generation
+**Description**: Generate and persist reminder schedules for newly created medications  
+**Status**: ⏳ PENDING
+
+**Gaps Identified**:
+- No code creates `reminder_schedules` documents or instances
+- Scenario 1 expects reminders at specified times after medication creation
+- Notification helper exists but never invoked with calculated schedule
+
+**Next Steps**:
+- [ ] Implement schedule builder (derive instances from dosage/frequency)
+- [ ] Persist schedule via Firestore converter
+- [ ] Update medication creation flow to trigger schedule generation
+- [ ] Add Firestore index if reminder queries require ordering by next instance
+
+**Dependencies**: W032  
+**Validation**: ReminderSchedule document created and linked to medication
+
+---
+
+### W034: Reminder Notification Triggering
+**Description**: Wire reminder schedules to actual push/local notifications  
+**Status**: ⏳ PENDING
+
+**Gaps Identified**:
+- `notificationService` exposes helper but is not integrated with schedules
+- No trigger to send reminders at scheduled times
+- Scenario 1 expects reminder to fire at next dose time
+
+**Next Steps**:
+- [ ] Choose triggering mechanism (client polling, Cloud Function, or SW alarms)
+- [ ] Integrate with `notifyScheduleReminder`
+- [ ] Add automated test verifying reminder fires after schedule creation
+
+**Dependencies**: W033  
+**Validation**: Reminder toast/notification shows at scheduled time during automated test
+
+---
 
 ### W028: ✅ Service Worker for Offline Support (COMPLETE - 2025-10-18)
 **Description**: Implement Service Worker for PWA  

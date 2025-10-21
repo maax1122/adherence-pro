@@ -1,23 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
-  Avatar,
   Box,
   Button,
-  Card,
-  CardActions,
-  CardContent,
-  CardHeader,
-  Chip,
   CircularProgress,
-  Divider,
+  Dialog,
+  DialogContent,
+  DialogTitle,
   Fab,
-  Grid,
-  IconButton,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
   Stack,
   ToggleButton,
   ToggleButtonGroup,
@@ -26,32 +16,27 @@ import {
 } from '@mui/material';
 import {
   Add as AddIcon,
-  CheckCircle as CheckCircleIcon,
-  Delete as DeleteIcon,
-  Medication as MedicationIcon,
   Refresh as RefreshIcon,
-  Schedule as ScheduleIcon,
   WarningAmber as WarningAmberIcon,
 } from '@mui/icons-material';
-import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import NotificationBanner from '@/components/NotificationBanner';
 import { useLayoutContext } from '@/components/Layout';
 import {
+  createMedicationRequest,
   deleteMedicationRequest,
   getPatientMedicationRequests,
   updateMedicationRequest,
 } from '@/services/firestore/medicationRequestService';
 import { logMedication } from '@/services/firestore/medicationAdministrationService';
 import type { MedicationRequestDocument } from '@/types/fhir';
+import {
+  MedicationForm,
+  MedicationFormSubmitPayload,
+  MedicationList,
+} from '@/components/medication';
 
 type MedicationFilter = 'all' | 'active' | 'prn' | 'completed';
-
-interface StatusStyle {
-  label: string;
-  color: 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning';
-  icon: React.ReactElement;
-}
 
 const FILTER_OPTIONS: Array<{ value: MedicationFilter; label: string }> = [
   { value: 'all', label: 'All' },
@@ -59,117 +44,6 @@ const FILTER_OPTIONS: Array<{ value: MedicationFilter; label: string }> = [
   { value: 'prn', label: 'PRN' },
   { value: 'completed', label: 'Completed' },
 ];
-
-const statusBadge = (status: MedicationRequestDocument['status']): StatusStyle => {
-  switch (status) {
-    case 'active':
-      return {
-        label: 'Active',
-        color: 'success',
-        icon: <CheckCircleIcon fontSize="small" />,
-      };
-    case 'completed':
-      return {
-        label: 'Completed',
-        color: 'primary',
-        icon: <CheckCircleIcon fontSize="small" />,
-      };
-    case 'on-hold':
-      return {
-        label: 'On hold',
-        color: 'warning',
-        icon: <WarningAmberIcon fontSize="small" />,
-      };
-    case 'stopped':
-    case 'cancelled':
-      return {
-        label: 'Inactive',
-        color: 'default',
-        icon: <WarningAmberIcon fontSize="small" />,
-      };
-    default:
-      return {
-        label: status,
-        color: 'info',
-        icon: <MedicationIcon fontSize="small" />,
-      };
-  }
-};
-
-const getMedicationInitial = (medication: MedicationRequestDocument): string => {
-  const name = medication.medicationName?.trim();
-  if (name) {
-    return name.charAt(0).toUpperCase();
-  }
-  return 'M';
-};
-
-const formatDosage = (medication: MedicationRequestDocument): string | null => {
-  const dosage = medication.dosageInstruction?.[0];
-  if (!dosage) {
-    return null;
-  }
-
-  if (dosage.text) {
-    return dosage.text;
-  }
-
-  if (dosage.patientInstruction) {
-    return dosage.patientInstruction;
-  }
-
-  if (dosage.doseAndRate?.length) {
-    const quantity = dosage.doseAndRate[0]?.doseQuantity;
-    if (quantity?.value) {
-      return `${quantity.value}${quantity.unit ? ` ${quantity.unit}` : ''}`;
-    }
-  }
-
-  return null;
-};
-
-const formatFrequency = (medication: MedicationRequestDocument): string | null => {
-  const repeat = medication.dosageInstruction?.[0]?.timing?.repeat;
-  if (!repeat) {
-    return null;
-  }
-
-  if (repeat.timeOfDay && repeat.timeOfDay.length > 0) {
-    const formattedTimes = repeat.timeOfDay.map((time) => {
-      const [hours = '0', minutes = '0'] = time.split(':');
-      const parsedHours = Number.parseInt(hours, 10);
-      const parsedMinutes = Number.parseInt(minutes, 10);
-      if (Number.isNaN(parsedHours) || Number.isNaN(parsedMinutes)) {
-        return time;
-      }
-
-      const date = new Date();
-      date.setHours(parsedHours, parsedMinutes, 0, 0);
-      return format(date, 'p');
-    });
-    return `Take at ${formattedTimes.join(', ')}`;
-  }
-
-  if (repeat.frequency && repeat.period && repeat.periodUnit) {
-    const units: Record<string, string> = {
-      h: 'hour',
-      d: 'day',
-      wk: 'week',
-      mo: 'month',
-    };
-    const unit = units[repeat.periodUnit] || repeat.periodUnit;
-    const freq = repeat.frequency === 1 ? 'Once' : `${repeat.frequency} times`;
-    const period =
-      repeat.period === 1 ? unit : `${repeat.period} ${unit}${repeat.period > 1 ? 's' : ''}`;
-    return `${freq} every ${period}`;
-  }
-
-  if (repeat?.count) {
-    return `Total of ${repeat.count} doses`;
-  }
-
-  return null;
-};
 
 const filterMedications = (medications: MedicationRequestDocument[], filter: MedicationFilter) => {
   switch (filter) {
@@ -185,13 +59,23 @@ const filterMedications = (medications: MedicationRequestDocument[], filter: Med
 };
 
 const MedicationsPage: React.FC = () => {
-  const { selectedPatient, selectedPatientId, isLoadingPatients } = useLayoutContext();
+  const {
+    selectedPatient,
+    selectedPatientId,
+    isLoadingPatients,
+    patientError: layoutPatientError,
+  } = useLayoutContext();
   const navigate = useNavigate();
+
+  const [medications, setMedications] = useState<MedicationRequestDocument[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [medications, setMedications] = useState<MedicationRequestDocument[]>([]);
   const [filter, setFilter] = useState<MedicationFilter>('all');
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+
+  const [isCreateDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [createSubmitting, setCreateSubmitting] = useState(false);
 
   const loadMedications = useCallback(async () => {
     if (!selectedPatientId) {
@@ -302,6 +186,55 @@ const MedicationsPage: React.FC = () => {
 
   const disableActions = !selectedPatientId || isLoading || isLoadingPatients;
 
+  const handleOpenCreateDialog = () => {
+    setCreateError(null);
+    setCreateDialogOpen(true);
+  };
+
+  const handleCloseCreateDialog = () => {
+    if (createSubmitting) {
+      return;
+    }
+    setCreateError(null);
+    setCreateDialogOpen(false);
+  };
+
+  const handleCreateMedication = async (payload: MedicationFormSubmitPayload) => {
+    if (!selectedPatientId) {
+      setCreateError('Select a profile before adding a medication.');
+      return;
+    }
+
+    setCreateSubmitting(true);
+    setCreateError(null);
+
+    try {
+      await createMedicationRequest({
+        patientId: selectedPatientId,
+        medicationName: payload.medicationName,
+        dosageInstruction: payload.dosageInstruction,
+        isPRN: payload.isPrn,
+        priority: payload.priority,
+        dispenseRequest: payload.dispenseRequest,
+      });
+      setCreateDialogOpen(false);
+      await loadMedications();
+    } catch (createErr) {
+      console.error('Failed to create medication', createErr);
+      setCreateError(
+        createErr instanceof Error
+          ? createErr.message
+          : 'Unable to create medication. Please try again.'
+      );
+    } finally {
+      setCreateSubmitting(false);
+    }
+  };
+
+  const hasNoPatient = !isLoadingPatients && !selectedPatientId;
+  const showEmptyState =
+    !isLoading && selectedPatientId && filteredMedications.length === 0 && !error;
+
   return (
     <Box sx={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 3 }}>
       <Box
@@ -323,38 +256,57 @@ const MedicationsPage: React.FC = () => {
               : 'Select a profile to view and manage medications.'}
           </Typography>
         </Box>
-        <Stack direction="row" spacing={1.5}>
+        <Stack direction="row" spacing={1.5} alignItems="center">
           <ToggleButtonGroup
             value={filter}
             exclusive
             onChange={handleFilterChange}
             size="small"
-            aria-label="Medication filter"
+            aria-label="Filter medications"
           >
             {FILTER_OPTIONS.map((option) => (
-              <ToggleButton key={option.value} value={option.value} aria-label={option.label}>
+              <ToggleButton key={option.value} value={option.value}>
                 {option.label}
               </ToggleButton>
             ))}
           </ToggleButtonGroup>
           <Tooltip title="Refresh medication list">
             <span>
-              <IconButton
+              <Button
+                variant="outlined"
+                startIcon={isLoading ? <CircularProgress size={20} /> : <RefreshIcon />}
+                onClick={() => loadMedications()}
+                disabled={isLoading}
                 aria-label="Refresh medications"
-                onClick={() => {
-                  void loadMedications();
-                }}
-                disabled={disableActions}
               >
-                {isLoading ? <CircularProgress size={20} /> : <RefreshIcon />}
-              </IconButton>
+                Refresh
+              </Button>
+            </span>
+          </Tooltip>
+          <Tooltip
+            title={
+              selectedPatientId
+                ? 'Add a new medication'
+                : 'Select a profile before adding medications'
+            }
+          >
+            <span>
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<AddIcon />}
+                onClick={handleOpenCreateDialog}
+                disabled={!selectedPatientId || createSubmitting || isLoadingPatients}
+              >
+                Add Medication
+              </Button>
             </span>
           </Tooltip>
         </Stack>
       </Box>
 
       <NotificationBanner
-        id="medications-error-banner"
+        id="medications-error"
         visible={Boolean(error)}
         severity="error"
         icon={<WarningAmberIcon fontSize="inherit" />}
@@ -364,11 +316,11 @@ const MedicationsPage: React.FC = () => {
 
       <NotificationBanner
         id="medications-no-patient"
-        visible={!isLoadingPatients && !selectedPatientId}
+        visible={hasNoPatient}
         severity="info"
-        icon={<MedicationIcon fontSize="inherit" />}
+        icon={<WarningAmberIcon fontSize="inherit" />}
       >
-        Select a profile in the header to manage medications.
+        {layoutPatientError ?? 'Select a profile in the header to manage medications.'}
       </NotificationBanner>
 
       {(isLoadingPatients || isLoading) && (
@@ -377,7 +329,20 @@ const MedicationsPage: React.FC = () => {
         </Box>
       )}
 
-      {!isLoading && selectedPatientId && filteredMedications.length === 0 && (
+      {!isLoading && selectedPatientId && filteredMedications.length > 0 && (
+        <MedicationList
+          medications={filteredMedications}
+          actionLoadingMap={actionLoading}
+          disableActions={disableActions}
+          onLogDose={handleLogDose}
+          onEdit={handleEdit}
+          onMarkCompleted={handleMarkCompleted}
+          onDelete={handleDelete}
+          onOpenDetail={handleNavigateToDetail}
+        />
+      )}
+
+      {showEmptyState && (
         <Alert severity="info">
           {filter === 'all'
             ? 'No medications found for this profile yet.'
@@ -385,153 +350,43 @@ const MedicationsPage: React.FC = () => {
         </Alert>
       )}
 
-      <Grid container spacing={3}>
-        {filteredMedications.map((medication) => {
-          const badge = statusBadge(medication.status);
-          const dosage = formatDosage(medication);
-          const frequency = formatFrequency(medication);
-          const isActionLoading = Boolean(actionLoading[medication.id]);
-
-          return (
-            <Grid item xs={12} md={6} key={medication.id}>
-              <Card
-                variant="outlined"
-                sx={{
-                  height: '100%',
-                  cursor: 'pointer',
-                  transition: (theme) =>
-                    theme.transitions.create('box-shadow', { duration: theme.transitions.duration.shortest }),
-                  '&:hover': {
-                    boxShadow: 3,
-                  },
-                }}
-                onClick={() => handleNavigateToDetail(medication)}
-              >
-                <CardHeader
-                  avatar={
-                    <Avatar>
-                      <MedicationIcon />
-                    </Avatar>
-                  }
-                  title={medication.medicationName}
-                  subheader={
-                    medication.priority ? `Priority: ${medication.priority.toUpperCase()}` : undefined
-                  }
-                  action={
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      {medication.isPRN && <Chip label="PRN" size="small" color="info" />}
-                      <Chip
-                        label={badge.label}
-                        color={badge.color}
-                        size="small"
-                        icon={badge.icon}
-                      />
-                    </Stack>
-                  }
-                />
-                <CardContent>
-                  <List dense disablePadding>
-                    <ListItem>
-                      <ListItemIcon sx={{ minWidth: 36 }}>
-                        <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32 }}>
-                          {getMedicationInitial(medication)}
-                        </Avatar>
-                      </ListItemIcon>
-                      <ListItemText
-                        primary="Dosage"
-                        secondary={dosage || 'Not specified'}
-                        primaryTypographyProps={{ variant: 'subtitle2' }}
-                      />
-                    </ListItem>
-                    <Divider component="li" />
-                    <ListItem>
-                      <ListItemIcon sx={{ minWidth: 36 }}>
-                        <Avatar sx={{ bgcolor: 'secondary.main', width: 32, height: 32 }}>
-                          <ScheduleIcon fontSize="small" />
-                        </Avatar>
-                      </ListItemIcon>
-                      <ListItemText
-                        primary="Frequency"
-                        secondary={frequency || (medication.isPRN ? 'As needed' : 'Not specified')}
-                        primaryTypographyProps={{ variant: 'subtitle2' }}
-                      />
-                    </ListItem>
-                  </List>
-                </CardContent>
-                <CardActions sx={{ justifyContent: 'space-between', px: 3, pb: 3 }}>
-                  <Stack direction="row" spacing={1.5}>
-                    <Button
-                      variant="contained"
-                      size="small"
-                      color="primary"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void handleLogDose(medication);
-                      }}
-                      disabled={isActionLoading || medication.status !== 'active'}
-                    >
-                      {isActionLoading ? <CircularProgress size={16} /> : 'Log dose'}
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleEdit(medication);
-                      }}
-                    >
-                      Edit
-                    </Button>
-                  </Stack>
-                  <Stack direction="row" spacing={1}>
-                    <Tooltip title="Mark medication as completed">
-                      <span>
-                        <IconButton
-                          color="success"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void handleMarkCompleted(medication);
-                          }}
-                          disabled={isActionLoading || medication.status === 'completed'}
-                        >
-                          <CheckCircleIcon />
-                        </IconButton>
-                      </span>
-                    </Tooltip>
-                    <Tooltip title="Delete medication">
-                      <span>
-                        <IconButton
-                          color="error"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void handleDelete(medication);
-                          }}
-                          disabled={isActionLoading}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </span>
-                    </Tooltip>
-                  </Stack>
-                </CardActions>
-              </Card>
-            </Grid>
-          );
-        })}
-      </Grid>
-
-      <Tooltip title="Add medication (coming soon)">
+      <Tooltip
+        title={
+          selectedPatientId
+            ? 'Add a new medication'
+            : 'Select a profile before adding medications'
+        }
+      >
         <span>
           <Fab
             color="primary"
             aria-label="Add medication"
             sx={{ position: 'fixed', bottom: 32, right: 32 }}
-            disabled
+            onClick={handleOpenCreateDialog}
+            disabled={!selectedPatientId || createSubmitting || isLoadingPatients}
           >
             <AddIcon />
           </Fab>
         </span>
       </Tooltip>
+
+      <Dialog
+        open={isCreateDialogOpen}
+        onClose={handleCloseCreateDialog}
+        fullWidth
+        maxWidth="md"
+        aria-labelledby="create-medication-title"
+      >
+        <DialogTitle id="create-medication-title">Add medication</DialogTitle>
+        <DialogContent dividers>
+          <MedicationForm
+            submitting={createSubmitting}
+            errorMessage={createError}
+            onSubmit={handleCreateMedication}
+            onCancel={handleCloseCreateDialog}
+          />
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 };

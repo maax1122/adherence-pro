@@ -5,10 +5,10 @@ import { AuthProvider } from './contexts/AuthContext';
 // Pages (to be created)
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
-import DashboardPage from './pages/DashboardPage';
+import HomePage from './pages/HomePage';
 import MedicationsPage from './pages/MedicationsPage';
 import FamilyPage from './pages/FamilyPage';
-import { PrivateRoute } from './components/PrivateRoute';
+import ProtectedRoute from './components/common/ProtectedRoute';
 import Layout from './components/Layout';
 
 // Create Material-UI theme
@@ -35,9 +35,9 @@ const theme = createTheme({
 });
 
 const LayoutWrapper = ({ children }: { children: React.ReactNode }) => (
-  <PrivateRoute>
+  <ProtectedRoute>
     <Layout>{children}</Layout>
-  </PrivateRoute>
+  </ProtectedRoute>
 );
 
 function App() {
@@ -56,7 +56,7 @@ function App() {
               path="/dashboard"
               element={
                 <LayoutWrapper>
-                  <DashboardPage />
+                  <HomePage />
                 </LayoutWrapper>
               }
             />

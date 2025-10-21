@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Generated files
+coverage/
+
+# Environment files
+.env
+.env.*
+
+# Expo artifacts
+.expo/
+.expo-shared/

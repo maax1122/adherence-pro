@@ -1,0 +1,38 @@
+# Node.js dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+coverage/
+
+# Logs and debug artifacts
+*.log
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+firebase-debug.log
+firestore-debug.log
+
+# Environment and local configuration
+.env
+.env.*
+.local
+
+# Editors and IDEs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Expo / React Native caches
+medication-tracker-app/.expo/
+medication-tracker-app/.expo-shared/
+
+# Testing caches
+.vitest
+
+# Firebase local cache
+.firebase/

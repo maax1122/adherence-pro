@@ -1,0 +1,17 @@
+# Build output
+dist/
+build/
+
+# Dependencies
+node_modules/
+
+# Generated coverage
+coverage/
+
+# Environment files
+.env
+.env.*
+
+# Configuration artifacts
+vite.config.ts
+vitest.config.ts
