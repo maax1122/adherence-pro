@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import { AuthProvider } from './contexts/AuthContext';
+import { ProfileProvider } from './contexts/ProfileContext';
 
 // Pages (to be created)
 import LoginPage from './pages/LoginPage';
@@ -45,42 +46,44 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <AuthProvider>
-        <Router>
-          <Routes>
-            {/* Public routes */}
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
+        <ProfileProvider>
+          <Router>
+            <Routes>
+              {/* Public routes */}
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
 
-            {/* Protected routes */}
-            <Route
-              path="/dashboard"
-              element={
-                <LayoutWrapper>
-                  <HomePage />
-                </LayoutWrapper>
-              }
-            />
-            <Route
-              path="/medications"
-              element={
-                <LayoutWrapper>
-                  <MedicationsPage />
-                </LayoutWrapper>
-              }
-            />
-            <Route
-              path="/family"
-              element={
-                <LayoutWrapper>
-                  <FamilyPage />
-                </LayoutWrapper>
-              }
-            />
+              {/* Protected routes */}
+              <Route
+                path="/dashboard"
+                element={
+                  <LayoutWrapper>
+                    <HomePage />
+                  </LayoutWrapper>
+                }
+              />
+              <Route
+                path="/medications"
+                element={
+                  <LayoutWrapper>
+                    <MedicationsPage />
+                  </LayoutWrapper>
+                }
+              />
+              <Route
+                path="/family"
+                element={
+                  <LayoutWrapper>
+                    <FamilyPage />
+                  </LayoutWrapper>
+                }
+              />
 
-            {/* Redirect root to dashboard */}
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-        </Router>
+              {/* Redirect root to dashboard */}
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </Router>
+        </ProfileProvider>
       </AuthProvider>
     </ThemeProvider>
   );

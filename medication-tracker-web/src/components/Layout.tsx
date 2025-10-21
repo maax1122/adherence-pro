@@ -1,18 +1,13 @@
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   AppBar,
   Avatar,
   Box,
   CircularProgress,
   CssBaseline,
+  Dialog,
+  DialogContent,
+  DialogTitle,
   Divider,
   Drawer,
   IconButton,
@@ -36,15 +31,14 @@ import {
   Menu as MenuIcon,
   Settings as SettingsIcon,
 } from '@mui/icons-material';
-import type { User } from 'firebase/auth';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProfileContext } from '@/contexts/ProfileContext';
 import useOnlineStatus from '@/hooks/useOnlineStatus';
 import * as authService from '@/services/auth/authService';
-import { getUserPatients } from '@/services/firestore/patientService';
-import { PatientDocument } from '@/types/fhir';
 import NotificationBanner from '@/components/NotificationBanner';
-import PatientSelector from '@/components/PatientSelector';
+import ProfileSwitcher from '@/components/family/ProfileSwitcher';
+import { PatientForm, PatientFormValues } from '@/components/patient/PatientForm';
 
 const drawerWidth = 264;
 
@@ -58,97 +52,23 @@ interface NavigationItem {
   icon: React.ReactNode;
 }
 
-interface LayoutContextValue {
-  patients: PatientDocument[];
-  selectedPatientId: string | null;
-  selectedPatient: PatientDocument | null;
-  isLoadingPatients: boolean;
-  patientError: string | null;
-  refreshPatients: () => Promise<PatientDocument[]>;
-  selectPatient: (patientId: string) => void;
-  currentUser: User | null;
-  isOnline: boolean;
-}
-
-const LayoutContext = createContext<LayoutContextValue | undefined>(undefined);
-
-export const useLayoutContext = (): LayoutContextValue => {
-  const context = useContext(LayoutContext);
-  if (!context) {
-    throw new Error('useLayoutContext must be used within Layout');
-  }
-  return context;
-};
-
-const Layout = ({ children }: LayoutProps) => {
+const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [isCreateDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const { currentUser } = useAuth();
+  const {
+    profiles,
+    isLoading,
+    error,
+    isCreating,
+    createProfile,
+    refreshProfiles,
+  } = useProfileContext();
   const navigate = useNavigate();
   const location = useLocation();
   const isOnline = useOnlineStatus();
-  const [patients, setPatients] = useState<PatientDocument[]>([]);
-  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
-  const [isLoadingPatients, setIsLoadingPatients] = useState(false);
-  const [patientError, setPatientError] = useState<string | null>(null);
-  const isMountedRef = useRef(true);
-
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  const fetchPatients = useCallback(async (): Promise<PatientDocument[]> => {
-    if (!currentUser) {
-      if (isMountedRef.current) {
-        setPatients([]);
-        setSelectedPatientId(null);
-        setPatientError(null);
-      }
-      return [];
-    }
-
-    if (isMountedRef.current) {
-      setIsLoadingPatients(true);
-      setPatientError(null);
-    }
-
-    try {
-      const userPatients = await getUserPatients(currentUser.uid);
-
-      if (isMountedRef.current) {
-        setPatients(userPatients);
-        setSelectedPatientId((previous) => {
-          if (previous && userPatients.some((patient) => patient.id === previous)) {
-            return previous;
-          }
-          return userPatients[0]?.id ?? null;
-        });
-      }
-
-      return userPatients;
-    } catch (error) {
-      if (isMountedRef.current) {
-        console.error('Failed to load patient profiles', error);
-        setPatients([]);
-        setSelectedPatientId(null);
-        setPatientError('Unable to load profiles. Please try again.');
-      }
-
-      throw error;
-    } finally {
-      if (isMountedRef.current) {
-        setIsLoadingPatients(false);
-      }
-    }
-  }, [currentUser]);
-
-  useEffect(() => {
-    fetchPatients().catch(() => {
-      // Error already handled in fetchPatients
-    });
-  }, [fetchPatients]);
 
   const handleDrawerToggle = () => {
     setMobileOpen((previous) => !previous);
@@ -170,17 +90,7 @@ const Layout = ({ children }: LayoutProps) => {
 
   const handleSettings = () => {
     handleMenuClose();
-    // Settings route will be provided in a future web task
-  };
-
-  const handlePatientSelect = useCallback((patientId: string) => {
-    setSelectedPatientId(patientId);
-  }, []);
-
-  const handleNavigationClick = () => {
-    if (mobileOpen) {
-      setMobileOpen(false);
-    }
+    // Settings page to be implemented in a future iteration
   };
 
   const navigationItems = useMemo<NavigationItem[]>(
@@ -196,42 +106,61 @@ const Layout = ({ children }: LayoutProps) => {
     if (!currentUser) {
       return '?';
     }
-
     if (currentUser.displayName) {
       return currentUser.displayName.charAt(0).toUpperCase();
     }
-
     if (currentUser.email) {
       return currentUser.email.charAt(0).toUpperCase();
     }
-
     return '?';
   }, [currentUser]);
 
-  const contextValue = useMemo<LayoutContextValue>(() => {
-    const selectedPatient = patients.find((patient) => patient.id === selectedPatientId) ?? null;
+  const handleNavigationClick = () => {
+    if (mobileOpen) {
+      setMobileOpen(false);
+    }
+  };
 
-    return {
-      patients,
-      selectedPatientId,
-      selectedPatient,
-      isLoadingPatients,
-      patientError,
-      refreshPatients: fetchPatients,
-      selectPatient: handlePatientSelect,
-      currentUser,
-      isOnline,
-    };
-  }, [
-    patients,
-    selectedPatientId,
-    isLoadingPatients,
-    patientError,
-    fetchPatients,
-    handlePatientSelect,
-    currentUser,
-    isOnline,
-  ]);
+  const handleOpenCreateProfile = () => {
+    setCreateError(null);
+    setCreateDialogOpen(true);
+  };
+
+  const handleCloseCreateProfile = () => {
+    if (isCreating) {
+      return;
+    }
+    setCreateError(null);
+    setCreateDialogOpen(false);
+  };
+
+  const handleSubmitCreateProfile = useCallback(
+    async (values: PatientFormValues) => {
+      setCreateError(null);
+      try {
+        await createProfile({
+          name: values.name.trim(),
+          birthDate: values.birthDate || undefined,
+          gender: values.gender,
+          relationship: values.relationship,
+          photoUrl: undefined,
+        });
+        setCreateDialogOpen(false);
+      } catch (createProfileError) {
+        console.error('Failed to create profile from layout dialog', createProfileError);
+        setCreateError(
+          createProfileError instanceof Error
+            ? createProfileError.message
+            : 'Unable to create profile. Please try again.'
+        );
+        // Ensure list remains fresh on failure
+        await refreshProfiles().catch(() => {
+          // Errors surfaced via context banner
+        });
+      }
+    },
+    [createProfile, refreshProfiles]
+  );
 
   const drawer = (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -284,156 +213,165 @@ const Layout = ({ children }: LayoutProps) => {
   );
 
   return (
-    <LayoutContext.Provider value={contextValue}>
-      <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-        <CssBaseline />
-        <AppBar
-          position="fixed"
-          color="primary"
-          elevation={1}
-          sx={{
-            width: { sm: `calc(100% - ${drawerWidth}px)` },
-            ml: { sm: `${drawerWidth}px` },
-          }}
-        >
-          <Toolbar sx={{ gap: 2 }}>
-            <IconButton
-              color="inherit"
-              aria-label="open navigation"
-              edge="start"
-              onClick={handleDrawerToggle}
-              sx={{
-                mr: 2,
-                display: { sm: 'none' },
-              }}
-            >
-              <MenuIcon />
-            </IconButton>
-            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-              Medication Tracker
-            </Typography>
-            {currentUser && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <PatientSelector
-                  patients={patients}
-                  selectedPatientId={selectedPatientId}
-                  onChange={handlePatientSelect}
-                  disabled={isLoadingPatients || patients.length === 0}
-                />
-                {isLoadingPatients && <CircularProgress size={20} />}
-                <IconButton
-                  size="large"
-                  aria-label="user menu"
-                  aria-controls="user-menu"
-                  aria-haspopup="true"
-                  onClick={handleMenuOpen}
-                  color="inherit"
-                >
-                  <Avatar sx={{ width: 34, height: 34 }}>{userInitial}</Avatar>
-                </IconButton>
-                <Menu
-                  id="user-menu"
-                  anchorEl={anchorEl}
-                  anchorOrigin={{
-                    vertical: 'bottom',
-                    horizontal: 'right',
-                  }}
-                  transformOrigin={{
-                    vertical: 'top',
-                    horizontal: 'right',
-                  }}
-                  keepMounted
-                  open={Boolean(anchorEl)}
-                  onClose={handleMenuClose}
-                >
-                  <MenuItem onClick={handleSettings} disabled>
-                    <ListItemIcon>
-                      <SettingsIcon fontSize="small" />
-                    </ListItemIcon>
-                    Settings
-                  </MenuItem>
-                  <Divider sx={{ my: 0.5 }} />
-                  <MenuItem onClick={handleLogout}>
-                    <ListItemIcon>
-                      <LogoutIcon fontSize="small" />
-                    </ListItemIcon>
-                    Logout
-                  </MenuItem>
-                </Menu>
-              </Box>
-            )}
-          </Toolbar>
-        </AppBar>
-        <Box
-          component="nav"
-          sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
-          aria-label="primary navigation"
-        >
-          <Drawer
-            variant="temporary"
-            open={mobileOpen}
-            onClose={handleDrawerToggle}
-            ModalProps={{ keepMounted: true }}
+    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+      <CssBaseline />
+      <AppBar
+        position="fixed"
+        color="primary"
+        elevation={1}
+        sx={{
+          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          ml: { sm: `${drawerWidth}px` },
+        }}
+      >
+        <Toolbar sx={{ gap: 2 }}>
+          <IconButton
+            color="inherit"
+            aria-label="open navigation"
+            edge="start"
+            onClick={handleDrawerToggle}
             sx={{
-              display: { xs: 'block', sm: 'none' },
-              '& .MuiDrawer-paper': {
-                boxSizing: 'border-box',
-                width: drawerWidth,
-              },
+              mr: 2,
+              display: { sm: 'none' },
             }}
           >
-            {drawer}
-          </Drawer>
-          <Drawer
-            variant="permanent"
-            open
-            sx={{
-              display: { xs: 'none', sm: 'block' },
-              '& .MuiDrawer-paper': {
-                boxSizing: 'border-box',
-                width: drawerWidth,
-              },
-            }}
-          >
-            {drawer}
-          </Drawer>
-        </Box>
-        <Box
-          component="main"
+            <MenuIcon />
+          </IconButton>
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+            Medication Tracker
+          </Typography>
+          {currentUser && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <ProfileSwitcher onAddProfile={handleOpenCreateProfile} disabled={isCreating} />
+              {(isLoading || isCreating) && <CircularProgress size={20} />}
+              <IconButton
+                size="large"
+                aria-label="user menu"
+                aria-controls="user-menu"
+                aria-haspopup="true"
+                onClick={handleMenuOpen}
+                color="inherit"
+              >
+                <Avatar sx={{ width: 34, height: 34 }}>{userInitial}</Avatar>
+              </IconButton>
+              <Menu
+                id="user-menu"
+                anchorEl={anchorEl}
+                anchorOrigin={{
+                  vertical: 'bottom',
+                  horizontal: 'right',
+                }}
+                transformOrigin={{
+                  vertical: 'top',
+                  horizontal: 'right',
+                }}
+                keepMounted
+                open={Boolean(anchorEl)}
+                onClose={handleMenuClose}
+              >
+                <MenuItem onClick={handleSettings} disabled>
+                  <ListItemIcon>
+                    <SettingsIcon fontSize="small" />
+                  </ListItemIcon>
+                  Settings
+                </MenuItem>
+                <Divider sx={{ my: 0.5 }} />
+                <MenuItem onClick={handleLogout}>
+                  <ListItemIcon>
+                    <LogoutIcon fontSize="small" />
+                  </ListItemIcon>
+                  Logout
+                </MenuItem>
+              </Menu>
+            </Box>
+          )}
+        </Toolbar>
+      </AppBar>
+      <Box
+        component="nav"
+        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
+        aria-label="primary navigation"
+      >
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={handleDrawerToggle}
+          ModalProps={{ keepMounted: true }}
           sx={{
-            flexGrow: 1,
-            width: { sm: `calc(100% - ${drawerWidth}px)` },
-            p: 3,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
+            display: { xs: 'block', sm: 'none' },
+            '& .MuiDrawer-paper': {
+              boxSizing: 'border-box',
+              width: drawerWidth,
+            },
           }}
         >
-          <Toolbar />
-          <NotificationBanner
-            id="offline-banner"
-            visible={!isOnline}
-            severity="warning"
-            icon={<CloudOffIcon fontSize="inherit" />}
-          >
-            You are currently offline. Some features may be unavailable.
-          </NotificationBanner>
-          <NotificationBanner
-            id="patient-error-banner"
-            visible={Boolean(patientError)}
-            severity="error"
-            icon={<ErrorOutlineIcon fontSize="inherit" />}
-          >
-            {patientError}
-          </NotificationBanner>
-          <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-            {children ?? <Outlet />}
-          </Box>
+          {drawer}
+        </Drawer>
+        <Drawer
+          variant="permanent"
+          open
+          sx={{
+            display: { xs: 'none', sm: 'block' },
+            '& .MuiDrawer-paper': {
+              boxSizing: 'border-box',
+              width: drawerWidth,
+            },
+          }}
+        >
+          {drawer}
+        </Drawer>
+      </Box>
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          p: 3,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+        }}
+      >
+        <Toolbar />
+        <NotificationBanner
+          id="offline-banner"
+          visible={!isOnline}
+          severity="warning"
+          icon={<CloudOffIcon fontSize="inherit" />}
+        >
+          You are currently offline. Some features may be unavailable.
+        </NotificationBanner>
+        <NotificationBanner
+          id="profile-error-banner"
+          visible={Boolean(error)}
+          severity="error"
+          icon={<ErrorOutlineIcon fontSize="inherit" />}
+        >
+          {error}
+        </NotificationBanner>
+        <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+          {children ?? <Outlet />}
         </Box>
       </Box>
-    </LayoutContext.Provider>
+
+      <Dialog open={isCreateDialogOpen} onClose={handleCloseCreateProfile} fullWidth maxWidth="sm">
+        <DialogTitle>Create profile</DialogTitle>
+        <DialogContent dividers sx={{ pt: 3 }}>
+          <PatientForm
+            onSubmit={handleSubmitCreateProfile}
+            onCancel={handleCloseCreateProfile}
+            submitting={isCreating}
+            errorMessage={createError}
+            initialValues={
+              profiles.length === 0
+                ? { relationship: 'self', name: currentUser?.displayName ?? '' }
+                : undefined
+            }
+          />
+        </DialogContent>
+      </Dialog>
+    </Box>
   );
 };
 
 export default Layout;
-export { LayoutContext };

@@ -21,7 +21,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import NotificationBanner from '@/components/NotificationBanner';
-import { useLayoutContext } from '@/components/Layout';
+import { useProfileContext } from '@/contexts/ProfileContext';
 import {
   createMedicationRequest,
   deleteMedicationRequest,
@@ -60,11 +60,11 @@ const filterMedications = (medications: MedicationRequestDocument[], filter: Med
 
 const MedicationsPage: React.FC = () => {
   const {
-    selectedPatient,
-    selectedPatientId,
-    isLoadingPatients,
-    patientError: layoutPatientError,
-  } = useLayoutContext();
+    activeProfile,
+    activeProfileId,
+    isLoading: isLoadingProfiles,
+    error: profileError,
+  } = useProfileContext();
   const navigate = useNavigate();
 
   const [medications, setMedications] = useState<MedicationRequestDocument[]>([]);
@@ -78,7 +78,7 @@ const MedicationsPage: React.FC = () => {
   const [createSubmitting, setCreateSubmitting] = useState(false);
 
   const loadMedications = useCallback(async () => {
-    if (!selectedPatientId) {
+    if (!activeProfileId) {
       setMedications([]);
       return;
     }
@@ -87,7 +87,7 @@ const MedicationsPage: React.FC = () => {
     setError(null);
 
     try {
-      const items = await getPatientMedicationRequests(selectedPatientId);
+      const items = await getPatientMedicationRequests(activeProfileId);
       setMedications(items);
     } catch (loadError) {
       console.error('Failed to load medications', loadError);
@@ -96,7 +96,7 @@ const MedicationsPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedPatientId]);
+  }, [activeProfileId]);
 
   useEffect(() => {
     void loadMedications();
@@ -184,7 +184,7 @@ const MedicationsPage: React.FC = () => {
     navigate(`/medications/${medication.id}/edit`);
   };
 
-  const disableActions = !selectedPatientId || isLoading || isLoadingPatients;
+  const disableActions = !activeProfileId || isLoading || isLoadingProfiles;
 
   const handleOpenCreateDialog = () => {
     setCreateError(null);
@@ -200,7 +200,7 @@ const MedicationsPage: React.FC = () => {
   };
 
   const handleCreateMedication = async (payload: MedicationFormSubmitPayload) => {
-    if (!selectedPatientId) {
+    if (!activeProfileId) {
       setCreateError('Select a profile before adding a medication.');
       return;
     }
@@ -210,7 +210,7 @@ const MedicationsPage: React.FC = () => {
 
     try {
       await createMedicationRequest({
-        patientId: selectedPatientId,
+        patientId: activeProfileId,
         medicationName: payload.medicationName,
         dosageInstruction: payload.dosageInstruction,
         isPRN: payload.isPrn,
@@ -231,9 +231,9 @@ const MedicationsPage: React.FC = () => {
     }
   };
 
-  const hasNoPatient = !isLoadingPatients && !selectedPatientId;
+  const hasNoPatient = !isLoadingProfiles && !activeProfileId;
   const showEmptyState =
-    !isLoading && selectedPatientId && filteredMedications.length === 0 && !error;
+    !isLoading && activeProfileId && filteredMedications.length === 0 && !error;
 
   return (
     <Box sx={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -251,8 +251,8 @@ const MedicationsPage: React.FC = () => {
             Medications
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            {selectedPatient
-              ? `Managing prescriptions for ${selectedPatient.name?.[0]?.text ?? 'this profile'}.`
+            {activeProfile
+              ? `Managing prescriptions for ${activeProfile.name?.[0]?.text ?? 'this profile'}.`
               : 'Select a profile to view and manage medications.'}
           </Typography>
         </Box>
@@ -285,7 +285,7 @@ const MedicationsPage: React.FC = () => {
           </Tooltip>
           <Tooltip
             title={
-              selectedPatientId
+              activeProfileId
                 ? 'Add a new medication'
                 : 'Select a profile before adding medications'
             }
@@ -296,7 +296,7 @@ const MedicationsPage: React.FC = () => {
                 color="primary"
                 startIcon={<AddIcon />}
                 onClick={handleOpenCreateDialog}
-                disabled={!selectedPatientId || createSubmitting || isLoadingPatients}
+                disabled={!activeProfileId || createSubmitting || isLoadingProfiles}
               >
                 Add Medication
               </Button>
@@ -320,16 +320,16 @@ const MedicationsPage: React.FC = () => {
         severity="info"
         icon={<WarningAmberIcon fontSize="inherit" />}
       >
-        {layoutPatientError ?? 'Select a profile in the header to manage medications.'}
+        {profileError ?? 'Select a profile in the header to manage medications.'}
       </NotificationBanner>
 
-      {(isLoadingPatients || isLoading) && (
+      {(isLoadingProfiles || isLoading) && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress />
         </Box>
       )}
 
-      {!isLoading && selectedPatientId && filteredMedications.length > 0 && (
+      {!isLoading && activeProfileId && filteredMedications.length > 0 && (
         <MedicationList
           medications={filteredMedications}
           actionLoadingMap={actionLoading}
@@ -352,7 +352,7 @@ const MedicationsPage: React.FC = () => {
 
       <Tooltip
         title={
-          selectedPatientId
+          activeProfileId
             ? 'Add a new medication'
             : 'Select a profile before adding medications'
         }
@@ -363,7 +363,7 @@ const MedicationsPage: React.FC = () => {
             aria-label="Add medication"
             sx={{ position: 'fixed', bottom: 32, right: 32 }}
             onClick={handleOpenCreateDialog}
-            disabled={!selectedPatientId || createSubmitting || isLoadingPatients}
+            disabled={!activeProfileId || createSubmitting || isLoadingProfiles}
           >
             <AddIcon />
           </Fab>

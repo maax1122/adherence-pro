@@ -129,28 +129,28 @@ All foundational tasks completed on 2025-10-09. Core infrastructure ready for us
 
 ### Tests for User Story 2
 
-- [ ] **T022** [P] [US2] Integration test for family profile management in `tests/integration/family-profile-management.test.ts`
+- [X] **T022** [P] [US2] Integration test for family profile management in `tests/integration/family-profile-management.test.ts`
   - **Description**: Test creating multiple profiles, switching between them, managing medications per profile
   - **Dependencies**: T015 passes (US1 complete)
 
 ### Implementation for User Story 2
 
-- [ ] **T023** [P] [US2] Profile switcher component in `src/components/family/ProfileSwitcher.tsx`
+- [X] **T023** [P] [US2] Profile switcher component in `src/components/family/ProfileSwitcher.tsx`
   - **Description**: Header dropdown to switch between family member profiles
   - **Dependencies**: T017 (PatientCard), T013 (patientService)
   - **Features**: Avatar display, profile list, current profile indicator, "Add Profile" option
 
-- [ ] **T024** [P] [US2] Family management page in `src/pages/FamilyPage.tsx`
+- [X] **T024** [P] [US2] Family management page in `src/pages/FamilyPage.tsx`
   - **Description**: Page to view all family members, add new profiles, manage existing
   - **Dependencies**: T023 (ProfileSwitcher), T017 (PatientForm)
   - **Features**: Family member grid, add/edit/delete profiles, profile photos
 
-- [ ] **T025** [US2] Global profile context in `src/contexts/ProfileContext.tsx`
+- [X] **T025** [US2] Global profile context in `src/contexts/ProfileContext.tsx`
   - **Description**: Context to manage current active profile across the app
   - **Dependencies**: T023 (ProfileSwitcher), T024 (FamilyPage)
   - **Features**: Current profile state, switch profile function, profile-specific data loading
 
-- [ ] **T026** [US2] Update existing pages for multi-profile support
+- [X] **T026** [US2] Update existing pages for multi-profile support
   - **Description**: Modify HomePage, medication pages to work with active profile
   - **Files**: Update T020 (HomePage), T019 (MedicationList), T018 (MedicationForm)
   - **Dependencies**: T025 (ProfileContext)

@@ -37,7 +37,7 @@ import {
 import { format, formatDistanceToNow, isToday } from 'date-fns';
 import { Timestamp } from 'firebase/firestore';
 import NotificationBanner from '@/components/NotificationBanner';
-import { useLayoutContext } from '@/components/Layout';
+import { useProfileContext } from '@/contexts/ProfileContext';
 import { PatientForm, PatientFormValues } from '@/components/patient/PatientForm';
 import PatientCard from '@/components/patient/PatientCard';
 import {
@@ -49,7 +49,6 @@ import {
   getPatientMedicationRequests,
 } from '@/services/firestore/medicationRequestService';
 import { getPatientMedicationLogs } from '@/services/firestore/medicationAdministrationService';
-import { createPatient } from '@/services/firestore/patientService';
 import type {
   MedicationAdministrationDocument,
   MedicationRequestDocument,
@@ -240,14 +239,15 @@ const DEFAULT_ADHERENCE_SUMMARY: AdherenceSummary = {
 
 const HomePage: React.FC = () => {
   const {
-    patients,
-    selectedPatient,
-    selectedPatientId,
-    selectPatient,
-    isLoadingPatients,
-    patientError,
-    refreshPatients,
-  } = useLayoutContext();
+    profiles,
+    activeProfile,
+    activeProfileId,
+    selectProfile,
+    isLoading,
+    error: profileError,
+    refreshProfiles,
+    createProfile,
+  } = useProfileContext();
   const [medicationRequests, setMedicationRequests] = useState<MedicationRequestDocument[]>([]);
   const [recentLogs, setRecentLogs] = useState<MedicationAdministrationDocument[]>([]);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
@@ -262,7 +262,7 @@ const HomePage: React.FC = () => {
   const [medicationSubmitting, setMedicationSubmitting] = useState(false);
 
   const loadDashboardData = useCallback(async () => {
-    if (!selectedPatientId) {
+    if (!activeProfileId) {
       setMedicationRequests([]);
       setRecentLogs([]);
       setIsLoadingDetails(false);
@@ -275,8 +275,8 @@ const HomePage: React.FC = () => {
 
     try {
       const [requests, logs] = await Promise.all([
-        getPatientMedicationRequests(selectedPatientId),
-        getPatientMedicationLogs(selectedPatientId, getLastNDaysRange(7)),
+        getPatientMedicationRequests(activeProfileId),
+        getPatientMedicationLogs(activeProfileId, getLastNDaysRange(7)),
       ]);
       setMedicationRequests(requests);
       setRecentLogs(logs);
@@ -288,7 +288,7 @@ const HomePage: React.FC = () => {
     } finally {
       setIsLoadingDetails(false);
     }
-  }, [selectedPatientId]);
+  }, [activeProfileId]);
 
   useEffect(() => {
     void loadDashboardData();
@@ -312,7 +312,7 @@ const HomePage: React.FC = () => {
     setPatientDialogError(null);
 
     try {
-      const patient = await createPatient({
+      const patient = await createProfile({
         name: values.name.trim(),
         birthDate: values.birthDate || undefined,
         gender: values.gender,
@@ -320,8 +320,8 @@ const HomePage: React.FC = () => {
         photoUrl: undefined,
       });
 
-      await refreshPatients();
-      selectPatient(patient.id);
+      await refreshProfiles();
+      selectProfile(patient.id);
       setPatientDialogOpen(false);
       await loadDashboardData();
     } catch (error) {
@@ -337,7 +337,7 @@ const HomePage: React.FC = () => {
   };
 
   const handleOpenMedicationDialog = () => {
-    if (!selectedPatientId) {
+    if (!activeProfileId) {
       setDetailsError('Select a profile before adding medications.');
       return;
     }
@@ -354,7 +354,7 @@ const HomePage: React.FC = () => {
   };
 
   const handleSubmitMedication = async (payload: MedicationFormSubmitPayload) => {
-    if (!selectedPatientId) {
+    if (!activeProfileId) {
       setMedicationDialogError('Select a profile before adding medications.');
       return;
     }
@@ -364,7 +364,7 @@ const HomePage: React.FC = () => {
 
     try {
       await createMedicationRequest({
-        patientId: selectedPatientId,
+        patientId: activeProfileId,
         medicationName: payload.medicationName,
         dosageInstruction: payload.dosageInstruction,
         isPRN: payload.isPrn,
@@ -422,23 +422,23 @@ const HomePage: React.FC = () => {
   );
 
   const headingSubtitle = useMemo(() => {
-    if (!selectedPatientId) {
-      if (patients.length === 0) {
+    if (!activeProfileId) {
+      if (profiles.length === 0) {
         return 'Add a profile to start tracking adherence.';
       }
       return 'Select a profile to view adherence insights.';
     }
 
-    return `Monitoring ${getPatientDisplayName(selectedPatient)} (${getRelationshipLabel(
-      selectedPatient
+    return `Monitoring ${getPatientDisplayName(activeProfile)} (${getRelationshipLabel(
+      activeProfile
     )})`;
-  }, [patients.length, selectedPatient, selectedPatientId]);
+  }, [profiles.length, activeProfile, activeProfileId]);
 
   const showSelectPatientBanner =
-    !isLoadingPatients && patients.length > 0 && !selectedPatientId;
+    !isLoading && profiles.length > 0 && !activeProfileId;
 
   const showEmptyState =
-    !isLoadingPatients && !isLoadingDetails && selectedPatientId && medicationRequests.length === 0;
+    !isLoading && !isLoadingDetails && activeProfileId && medicationRequests.length === 0;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -465,13 +465,13 @@ const HomePage: React.FC = () => {
             color="primary"
             startIcon={<FamilyRestroomIcon />}
             onClick={handleOpenPatientDialog}
-            disabled={patientSubmitting || isLoadingPatients}
+            disabled={patientSubmitting || isLoading}
           >
             Add Profile
           </Button>
           <Tooltip
             title={
-              selectedPatientId
+              activeProfileId
                 ? 'Add a medication for the selected profile'
                 : 'Select a profile before adding medications'
             }
@@ -482,7 +482,7 @@ const HomePage: React.FC = () => {
                 color="primary"
                 startIcon={<MedicationIcon />}
                 onClick={handleOpenMedicationDialog}
-                disabled={medicationSubmitting || !selectedPatientId || isLoadingPatients}
+                disabled={medicationSubmitting || !activeProfileId || isLoading}
               >
                 Add Medication
               </Button>
@@ -506,19 +506,19 @@ const HomePage: React.FC = () => {
         severity="info"
         icon={<PersonIcon fontSize="inherit" />}
       >
-        {patientError ?? 'Select a profile below to see adherence insights.'}
+        {profileError ?? 'Select a profile below to see adherence insights.'}
       </NotificationBanner>
 
       <NotificationBanner
-        id="dashboard-no-patients"
-        visible={!isLoadingPatients && patients.length === 0}
+        id="dashboard-no-profiles"
+        visible={!isLoading && profiles.length === 0}
         severity="info"
         icon={<FamilyRestroomIcon fontSize="inherit" />}
       >
         No profiles yet. Add a profile to start tracking medications.
       </NotificationBanner>
 
-      {(isLoadingPatients || isLoadingDetails) && (
+      {(isLoading || isLoadingDetails) && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress />
         </Box>
@@ -534,7 +534,7 @@ const HomePage: React.FC = () => {
                 </Avatar>
               }
               title="Adherence (7 days)"
-              subheader={selectedPatient ? getPatientDisplayName(selectedPatient) : '—'}
+              subheader={activeProfile ? getPatientDisplayName(activeProfile) : '—'}
             />
             <CardContent>
               {adherenceSummary.totalScheduled === 0 ? (
@@ -643,21 +643,21 @@ const HomePage: React.FC = () => {
             Patient Profiles
           </Typography>
           <Grid container spacing={2}>
-            {patients.map((patient) => (
+            {profiles.map((patient) => (
               <Grid item xs={12} sm={6} md={4} key={patient.id}>
                 <PatientCard
                   patient={patient}
-                  selected={patient.id === selectedPatientId}
-                  onSelect={() => selectPatient(patient.id)}
+                  selected={patient.id === activeProfileId}
+                  onSelect={() => selectProfile(patient.id)}
                   actions={
                     <Button
                       component="span"
                       size="small"
                       onClick={(event) => {
                         event.stopPropagation();
-                        selectPatient(patient.id);
+                        selectProfile(patient.id);
                       }}
-                      disabled={patient.id === selectedPatientId}
+                      disabled={patient.id === activeProfileId}
                     >
                       View
                     </Button>
@@ -665,7 +665,7 @@ const HomePage: React.FC = () => {
                 />
               </Grid>
             ))}
-            {patients.length === 0 && (
+            {profiles.length === 0 && (
               <Grid item xs={12}>
                 <Card variant="outlined">
                   <CardContent>
@@ -813,7 +813,7 @@ const HomePage: React.FC = () => {
 
       <Tooltip
         title={
-          selectedPatientId
+          activeProfileId
             ? 'Quick add medication'
             : 'Select a profile before adding medications'
         }
@@ -824,7 +824,7 @@ const HomePage: React.FC = () => {
             aria-label="Add medication"
             sx={{ position: 'fixed', bottom: 32, right: 32 }}
             onClick={handleOpenMedicationDialog}
-            disabled={!selectedPatientId || medicationSubmitting || isLoadingPatients}
+            disabled={!activeProfileId || medicationSubmitting || isLoading}
           >
             <AddIcon />
           </Fab>
@@ -845,7 +845,7 @@ const HomePage: React.FC = () => {
             errorMessage={patientDialogError}
             onSubmit={handleSubmitPatient}
             onCancel={handleClosePatientDialog}
-            initialValues={{ name: '', relationship: patients.length === 0 ? 'self' : 'other' }}
+            initialValues={{ name: '', relationship: profiles.length === 0 ? 'self' : 'other' }}
           />
         </DialogContent>
       </Dialog>

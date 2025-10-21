@@ -20,6 +20,7 @@ import {
   FormControl,
   FormControlLabel,
   FormGroup,
+  Grid,
   IconButton,
   List,
   ListItem,
@@ -40,12 +41,17 @@ import {
   ManageAccounts as ManageAccountsIcon,
   Pending as PendingIcon,
   Person as PersonIcon,
+  PersonAdd as PersonAddIcon,
   Refresh as RefreshIcon,
   Security as SecurityIcon,
+  Edit as EditIcon,
 } from '@mui/icons-material';
 import { formatDistanceToNow } from 'date-fns';
 import NotificationBanner from '@/components/NotificationBanner';
-import { useLayoutContext } from '@/components/Layout';
+import { useProfileContext } from '@/contexts/ProfileContext';
+import { useAuth } from '@/contexts/AuthContext';
+import PatientCard from '@/components/patient/PatientCard';
+import { PatientForm, PatientFormValues } from '@/components/patient/PatientForm';
 import {
   acceptInvitation,
   createInvitation,
@@ -54,43 +60,205 @@ import {
   revokeConnection,
   updatePermissions,
 } from '@/services/firestore/familyConnectionService';
-import type { FamilyConnection } from '@/types/fhir';
+import type { FamilyConnection, PatientDocument } from '@/types/fhir';
 
 type PermissionKey = 'view_only' | 'can_log';
 
 const DEFAULT_PERMISSIONS: PermissionKey[] = ['view_only'];
 
+const RELATIONSHIP_VALUES: PatientFormValues['relationship'][] = [
+  'self',
+  'parent',
+  'child',
+  'spouse',
+  'sibling',
+  'grandparent',
+  'grandchild',
+  'other',
+];
+
+const GENDER_VALUES: PatientFormValues['gender'][] = ['female', 'male', 'other', 'unknown'];
+
 const FamilyPage: React.FC = () => {
-  const { selectedPatient, selectedPatientId, isLoadingPatients, currentUser } = useLayoutContext();
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { currentUser } = useAuth();
+  const {
+    profiles,
+    activeProfile,
+    activeProfileId,
+    isLoading: isLoadingProfiles,
+    error: profileError,
+    isCreating,
+    pendingProfileIds,
+    createProfile,
+    updateProfile,
+    deleteProfile,
+    refreshProfiles,
+    selectProfile,
+  } = useProfileContext();
+  const [isLoadingConnections, setIsLoadingConnections] = useState(false);
+  const [connectionsError, setConnectionsError] = useState<string | null>(null);
   const [connections, setConnections] = useState<FamilyConnection[]>([]);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [invitePermissions, setInvitePermissions] = useState<PermissionKey[]>(DEFAULT_PERMISSIONS);
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const mapProfileToFormValues = useCallback(
+    (profile: PatientDocument): PatientFormValues => {
+      const relationship = RELATIONSHIP_VALUES.includes(profile.relationship as any)
+        ? (profile.relationship as PatientFormValues['relationship'])
+        : 'other';
+      const gender = GENDER_VALUES.includes(profile.gender as any)
+        ? (profile.gender as PatientFormValues['gender'])
+        : 'unknown';
+
+      return {
+        name: profile.name?.[0]?.text ?? '',
+        birthDate: profile.birthDate ?? undefined,
+        relationship,
+        gender,
+        photoUrl: profile.photo?.[0]?.url,
+      };
+    },
+    []
+  );
+
+  const handleRefreshProfiles = useCallback(async () => {
+    try {
+      await refreshProfiles();
+    } catch (refreshError) {
+      console.error('Failed to refresh profiles', refreshError);
+    }
+  }, [refreshProfiles]);
+
+  const handleOpenCreateProfile = () => {
+    setProfileDialogMode('create');
+    setProfileDialogProfileId(null);
+    setProfileDialogInitialValues({
+      name: '',
+      relationship: profiles.length === 0 ? 'self' : 'other',
+      gender: 'unknown',
+    });
+    setProfileDialogError(null);
+    setProfileDialogOpen(true);
+  };
+
+  const handleOpenEditProfile = (profile: PatientDocument) => {
+    setProfileDialogMode('edit');
+    setProfileDialogProfileId(profile.id);
+    setProfileDialogInitialValues(mapProfileToFormValues(profile));
+    setProfileDialogError(null);
+    setProfileDialogOpen(true);
+  };
+
+  const handleCloseProfileDialog = () => {
+    if (profileDialogOpen) {
+      const pendingState = profileDialogProfileId
+        ? pendingProfileIds[profileDialogProfileId]
+        : undefined;
+      if (isCreating || pendingState === 'updating') {
+        return;
+      }
+    }
+    setProfileDialogOpen(false);
+    setProfileDialogError(null);
+  };
+
+  const handleSubmitProfileDialog = async (values: PatientFormValues) => {
+    setProfileDialogError(null);
+    const payload = {
+      name: values.name.trim(),
+      birthDate: values.birthDate || undefined,
+      relationship: values.relationship,
+      gender: values.gender,
+      photoUrl: values.photoUrl || undefined,
+    };
+
+    try {
+      if (profileDialogMode === 'create') {
+        await createProfile(payload);
+      } else if (profileDialogProfileId) {
+        await updateProfile(profileDialogProfileId, payload);
+      }
+      await refreshProfiles();
+      setProfileDialogOpen(false);
+    } catch (profileMutationError) {
+      console.error('Failed to save profile', profileMutationError);
+      setProfileDialogError(
+        profileMutationError instanceof Error
+          ? profileMutationError.message
+          : 'Unable to save profile. Please try again.'
+      );
+    }
+  };
+
+  const handlePromptDeleteProfile = (profile: PatientDocument) => {
+    setDeleteDialogProfileId(profile.id);
+    setDeleteDialogError(null);
+    setDeleteDialogLoading(false);
+  };
+
+  const handleCloseDeleteDialog = () => {
+    if (deleteDialogLoading) {
+      return;
+    }
+    setDeleteDialogProfileId(null);
+    setDeleteDialogError(null);
+  };
+
+  const handleConfirmDeleteProfile = async () => {
+    if (!deleteDialogProfileId) {
+      return;
+    }
+
+    setDeleteDialogLoading(true);
+    setDeleteDialogError(null);
+    try {
+      await deleteProfile(deleteDialogProfileId);
+      await refreshProfiles();
+      setDeleteDialogProfileId(null);
+    } catch (deleteProfileError) {
+      console.error('Failed to delete profile', deleteProfileError);
+      setDeleteDialogError(
+        deleteProfileError instanceof Error
+          ? deleteProfileError.message
+          : 'Unable to remove this profile right now.'
+      );
+    } finally {
+      setDeleteDialogLoading(false);
+    }
+  };
+
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
+  const [profileDialogMode, setProfileDialogMode] = useState<'create' | 'edit'>('create');
+  const [profileDialogInitialValues, setProfileDialogInitialValues] =
+    useState<PatientFormValues | undefined>(undefined);
+  const [profileDialogProfileId, setProfileDialogProfileId] = useState<string | null>(null);
+  const [profileDialogError, setProfileDialogError] = useState<string | null>(null);
+  const [deleteDialogProfileId, setDeleteDialogProfileId] = useState<string | null>(null);
+  const [deleteDialogError, setDeleteDialogError] = useState<string | null>(null);
+  const [deleteDialogLoading, setDeleteDialogLoading] = useState(false);
 
   const loadConnections = useCallback(async () => {
-    if (!selectedPatientId) {
+    if (!activeProfileId) {
       setConnections([]);
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
+    setIsLoadingConnections(true);
+    setConnectionsError(null);
 
     try {
-      const results = await getPatientConnections(selectedPatientId);
+      const results = await getPatientConnections(activeProfileId);
       setConnections(results);
     } catch (loadError) {
       console.error('Failed to load family connections', loadError);
       setConnections([]);
-      setError('Unable to load caregiver data right now. Please try again.');
+      setConnectionsError('Unable to load caregiver data right now. Please try again.');
     } finally {
-      setIsLoading(false);
+      setIsLoadingConnections(false);
     }
-  }, [selectedPatientId]);
+  }, [activeProfileId]);
 
   useEffect(() => {
     void loadConnections();
@@ -146,22 +314,22 @@ const FamilyPage: React.FC = () => {
 
   const handleInviteSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedPatientId) {
+    if (!activeProfileId) {
       return;
     }
 
     const permissions = Array.from(new Set<PermissionKey>(invitePermissions));
     if (permissions.length === 0) {
-      setError('At least one permission must be selected when inviting a caregiver.');
+      setConnectionsError('At least one permission must be selected when inviting a caregiver.');
       return;
     }
 
     setInviteSubmitting(true);
-    setError(null);
+    setConnectionsError(null);
 
     try {
       await createInvitation({
-        patientId: selectedPatientId,
+        patientId: activeProfileId,
         caregiverEmail: inviteEmail.trim(),
         permissions,
       });
@@ -170,7 +338,7 @@ const FamilyPage: React.FC = () => {
       await loadConnections();
     } catch (inviteError) {
       console.error('Failed to invite caregiver', inviteError);
-      setError(
+      setConnectionsError(
         inviteError instanceof Error
           ? inviteError.message
           : 'Unable to send invitation. Please verify the email and try again.'
@@ -192,13 +360,13 @@ const FamilyPage: React.FC = () => {
 
   const handleRevoke = async (connection: FamilyConnection) => {
     setConnectionLoading(connection.id, true);
-    setError(null);
+    setConnectionsError(null);
     try {
       await revokeConnection(connection.id);
       await loadConnections();
     } catch (revokeError) {
       console.error('Failed to revoke connection', revokeError);
-      setError('Could not revoke caregiver access. Please try again.');
+      setConnectionsError('Could not revoke caregiver access. Please try again.');
     } finally {
       setConnectionLoading(connection.id, false);
     }
@@ -224,20 +392,20 @@ const FamilyPage: React.FC = () => {
     }
 
     if (updated.size === 0) {
-      setError('At least one permission must remain for each caregiver.');
+      setConnectionsError('At least one permission must remain for each caregiver.');
       return;
     }
 
     const permissions = Array.from(updated);
     setConnectionLoading(connection.id, true);
-    setError(null);
+    setConnectionsError(null);
 
     try {
       await updatePermissions(connection.id, { permissions });
       await loadConnections();
     } catch (permissionError) {
       console.error('Failed to update permissions', permissionError);
-      setError('Could not update caregiver permissions. Please try again.');
+      setConnectionsError('Could not update caregiver permissions. Please try again.');
     } finally {
       setConnectionLoading(connection.id, false);
     }
@@ -245,14 +413,14 @@ const FamilyPage: React.FC = () => {
 
   const handleAcceptInvitation = async (connection: FamilyConnection) => {
     setConnectionLoading(connection.id, true);
-    setError(null);
+    setConnectionsError(null);
 
     try {
       await acceptInvitation(connection.id);
       await loadConnections();
     } catch (acceptError) {
       console.error('Failed to accept invitation', acceptError);
-      setError(
+      setConnectionsError(
         acceptError instanceof Error
           ? acceptError.message
           : 'Unable to accept this invitation right now.'
@@ -264,14 +432,14 @@ const FamilyPage: React.FC = () => {
 
   const handleRejectInvitation = async (connection: FamilyConnection) => {
     setConnectionLoading(connection.id, true);
-    setError(null);
+    setConnectionsError(null);
 
     try {
       await rejectInvitation(connection.id);
       await loadConnections();
     } catch (rejectError) {
       console.error('Failed to reject invitation', rejectError);
-      setError(
+      setConnectionsError(
         rejectError instanceof Error
           ? rejectError.message
           : 'Unable to reject this invitation right now.'
@@ -290,7 +458,13 @@ const FamilyPage: React.FC = () => {
     return Boolean(userEmail && userEmail === connection.caregiverEmail.toLowerCase());
   };
 
-  const disableActions = !selectedPatientId || isLoading || isLoadingPatients;
+  const profileDialogPendingState = profileDialogProfileId
+    ? pendingProfileIds[profileDialogProfileId]
+    : undefined;
+  const isProfileDialogSubmitting =
+    profileDialogMode === 'create' ? isCreating : profileDialogPendingState === 'updating';
+
+  const disableActions = !activeProfileId || isLoadingConnections || isLoadingProfiles;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -305,21 +479,136 @@ const FamilyPage: React.FC = () => {
       >
         <Box>
           <Typography variant="h4" gutterBottom>
+            Family profiles
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Manage family members and switch between profiles to review adherence data.
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={1}>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={handleRefreshProfiles}
+            disabled={isLoadingProfiles}
+          >
+            Refresh
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<PersonAddIcon />}
+            onClick={handleOpenCreateProfile}
+            disabled={isCreating}
+          >
+            Add profile
+          </Button>
+        </Stack>
+      </Box>
+
+      <NotificationBanner
+        id="family-profile-error"
+        visible={Boolean(profileError)}
+        severity="error"
+        icon={<FamilyRestroomIcon fontSize="inherit" />}
+      >
+        {profileError}
+      </NotificationBanner>
+
+      <Grid container spacing={2}>
+        {profiles.map((profile) => {
+          const pendingState = pendingProfileIds[profile.id];
+          const isUpdating = pendingState === 'updating';
+          const isDeleting = pendingState === 'deleting';
+          const isBusy = isUpdating || isDeleting;
+
+          return (
+            <Grid item xs={12} sm={6} md={4} key={profile.id}>
+              <Box sx={{ position: 'relative' }}>
+                <PatientCard
+                  patient={profile}
+                  selected={profile.id === activeProfileId}
+                  onSelect={(patient) => selectProfile(patient.id)}
+                  actions={
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        size="small"
+                        onClick={() => selectProfile(profile.id)}
+                        disabled={isDeleting}
+                      >
+                        View
+                      </Button>
+                      <Button
+                        size="small"
+                        startIcon={<EditIcon fontSize="small" />}
+                        onClick={() => handleOpenEditProfile(profile)}
+                        disabled={isBusy}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        size="small"
+                        color="error"
+                        onClick={() => handlePromptDeleteProfile(profile)}
+                        disabled={isDeleting || profiles.length <= 1}
+                      >
+                        Remove
+                      </Button>
+                    </Stack>
+                  }
+                />
+                {isBusy && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      bgcolor: 'rgba(255,255,255,0.6)',
+                      borderRadius: 2,
+                    }}
+                  >
+                    <CircularProgress size={24} />
+                  </Box>
+                )}
+              </Box>
+            </Grid>
+          );
+        })}
+        {profiles.length === 0 && (
+          <Grid item xs={12}>
+            <Alert severity="info">Add your first profile to start coordinating family medications.</Alert>
+          </Grid>
+        )}
+      </Grid>
+
+      <Divider sx={{ my: 2 }} />
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: { xs: 'flex-start', sm: 'center' },
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 2,
+        }}
+      >
+        <Box>
+          <Typography variant="h4" gutterBottom>
             Caregiver access
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            {selectedPatient
-              ? `Manage caregivers for ${selectedPatient.name?.[0]?.text ?? 'this profile'}.`
+            {activeProfile
+              ? `Manage caregivers for ${activeProfile.name?.[0]?.text ?? 'this profile'}.`
               : 'Select a profile to manage caregiver invitations and permissions.'}
           </Typography>
         </Box>
-        <Tooltip title={selectedPatientId ? 'Invite a caregiver' : 'Select a profile first'}>
+        <Tooltip title={activeProfileId ? 'Invite a caregiver' : 'Select a profile first'}>
           <span>
             <Button
               variant="contained"
               startIcon={<GroupAddIcon />}
               onClick={handleOpenInviteDialog}
-              disabled={!selectedPatientId || isLoadingPatients}
+              disabled={!activeProfileId || isLoadingProfiles}
             >
               Invite caregiver
             </Button>
@@ -329,29 +618,29 @@ const FamilyPage: React.FC = () => {
 
       <NotificationBanner
         id="family-error-banner"
-        visible={Boolean(error)}
+        visible={Boolean(connectionsError)}
         severity="error"
         icon={<SecurityIcon fontSize="inherit" />}
       >
-        {error}
+        {connectionsError}
       </NotificationBanner>
 
       <NotificationBanner
         id="family-no-patient-banner"
-        visible={!isLoadingPatients && !selectedPatientId}
+        visible={!isLoadingProfiles && !activeProfileId}
         severity="info"
         icon={<FamilyRestroomIcon fontSize="inherit" />}
       >
         Choose a profile to review caregiver invitations and access rights.
       </NotificationBanner>
 
-      {(isLoadingPatients || isLoading) && (
+      {(isLoadingProfiles || isLoadingConnections) && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress />
         </Box>
       )}
 
-      {!isLoading && selectedPatientId && connections.length === 0 && (
+      {!isLoadingConnections && activeProfileId && connections.length === 0 && (
         <Alert severity="info">
           No caregivers yet. Invite someone to help manage adherence for this profile.
         </Alert>
@@ -614,6 +903,45 @@ const FamilyPage: React.FC = () => {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={profileDialogOpen} onClose={handleCloseProfileDialog} fullWidth maxWidth="sm">
+        <DialogTitle>{profileDialogMode === 'create' ? 'Add profile' : 'Edit profile'}</DialogTitle>
+        <DialogContent dividers sx={{ pt: 3 }}>
+          <PatientForm
+            onSubmit={handleSubmitProfileDialog}
+            onCancel={handleCloseProfileDialog}
+            submitting={isProfileDialogSubmitting}
+            errorMessage={profileDialogError}
+            initialValues={profileDialogInitialValues}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(deleteDialogProfileId)} onClose={handleCloseDeleteDialog} maxWidth="xs" fullWidth>
+        <DialogTitle>Remove profile</DialogTitle>
+        <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="body1">
+            Removing this profile will stop reminders and caregiver access for that family member.
+          </Typography>
+          {deleteDialogError && (
+            <Alert severity="error">{deleteDialogError}</Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDeleteDialog} disabled={deleteDialogLoading}>
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={handleConfirmDeleteProfile}
+            disabled={deleteDialogLoading}
+            startIcon={deleteDialogLoading ? <CircularProgress size={16} /> : undefined}
+          >
+            {deleteDialogLoading ? 'Removing…' : 'Remove'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={inviteDialogOpen} onClose={handleCloseInviteDialog} fullWidth maxWidth="sm">
         <form onSubmit={handleInviteSubmit}>
